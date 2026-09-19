@@ -26,6 +26,7 @@ class EmployeeProfile {
     this.canMarkAttendance = false,
     this.attendanceReasons = const [],
     this.assignedShift,
+    this.security = const EmployeeSecurityProfile(),
   });
 
   final String name;
@@ -54,6 +55,35 @@ class EmployeeProfile {
   final bool canMarkAttendance;
   final List<String> attendanceReasons;
   final EmployeeShiftProfile? assignedShift;
+  final EmployeeSecurityProfile security;
+}
+
+class EmployeeSecurityProfile {
+  const EmployeeSecurityProfile({
+    this.institutionalCameraAvailable = false,
+    this.locationName = '',
+    this.deviceId = '',
+    this.deviceName = '',
+    this.keyFingerprint = '',
+    this.deviceEnrolledAt,
+    this.totalScans = 0,
+    this.averageTrustScore,
+    this.highTrustCount = 0,
+    this.corroboratedCount = 0,
+  });
+
+  final bool institutionalCameraAvailable;
+  final String locationName;
+  final String deviceId;
+  final String deviceName;
+  final String keyFingerprint;
+  final DateTime? deviceEnrolledAt;
+  final int totalScans;
+  final double? averageTrustScore;
+  final int highTrustCount;
+  final int corroboratedCount;
+
+  bool get hasTrustedDevice => deviceId.isNotEmpty;
 }
 
 class EmployeeShiftProfile {

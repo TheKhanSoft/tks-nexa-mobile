@@ -432,6 +432,8 @@ class SecurityDevicesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(employeeProfileProvider).value;
+    final security = profile?.security;
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Security & devices')),
       body: _PageWidth(
@@ -444,7 +446,7 @@ class SecurityDevicesScreen extends ConsumerWidget {
               subtitle: 'Review the current session and manage your password.',
             ),
             const SizedBox(height: 20),
-            const _SectionLabel('ACTIVE SESSION'),
+            const _SectionLabel('TRUSTED DEVICE'),
             Card(
               child: ListTile(
                 contentPadding: const EdgeInsets.all(18),
@@ -457,19 +459,29 @@ class SecurityDevicesScreen extends ConsumerWidget {
                     color: Theme.of(context).colorScheme.secondary,
                   ),
                 ),
-                title: const Text(
-                  'This device',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+                title: Text(
+                  security?.deviceName.isNotEmpty == true
+                      ? security!.deviceName
+                      : 'This device',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
-                subtitle: const Text('Active now · Secure bearer session'),
-                trailing: const Icon(
-                  Icons.verified_rounded,
-                  color: AppPalette.emerald,
+                subtitle: Text(
+                  security?.hasTrustedDevice == true
+                      ? 'Hardware key enrolled and session active'
+                      : 'Secure bearer session active',
+                ),
+                trailing: Icon(
+                  security?.hasTrustedDevice == true
+                      ? Icons.verified_rounded
+                      : Icons.shield_outlined,
+                  color: security?.hasTrustedDevice == true
+                      ? AppPalette.emerald
+                      : colors.outline,
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            const _SectionLabel('BIOMETRIC READINESS'),
+            const _SectionLabel('VERIFICATION READINESS'),
             Card(
               child: ListTile(
                 contentPadding: const EdgeInsets.all(18),
@@ -490,6 +502,77 @@ class SecurityDevicesScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(18),
+                leading: Icon(
+                  security?.institutionalCameraAvailable == true
+                      ? Icons.videocam_rounded
+                      : Icons.videocam_off_outlined,
+                  color: security?.institutionalCameraAvailable == true
+                      ? AppPalette.emerald
+                      : colors.outline,
+                ),
+                title: Text(
+                  security?.institutionalCameraAvailable == true
+                      ? 'Institutional cameras available'
+                      : 'No institutional camera assigned',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: Text(
+                  security?.locationName.isNotEmpty == true
+                      ? security!.locationName
+                      : 'Based on your assigned campus and office.',
+                ),
+              ),
+            ),
+            if (security?.keyFingerprint.isNotEmpty == true) ...[
+              const SizedBox(height: 20),
+              const _SectionLabel('HARDWARE KEY FINGERPRINT'),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: SelectableText(
+                    _groupFingerprint(security!.keyFingerprint),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            const _SectionLabel('LAST 30 DAYS'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _SecurityMetric(
+                      icon: Icons.shield_rounded,
+                      label: 'Trust score',
+                      value: security?.averageTrustScore == null
+                          ? 'No data'
+                          : '${security!.averageTrustScore!.toStringAsFixed(1)}%',
+                    ),
+                    _SecurityMetric(
+                      icon: Icons.fact_check_outlined,
+                      label: 'Attendance scans',
+                      value: '${security?.totalScans ?? 0}',
+                    ),
+                    _SecurityMetric(
+                      icon: Icons.video_camera_front_rounded,
+                      label: 'Camera confirmed',
+                      value: '${security?.corroboratedCount ?? 0}',
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: () => context.push(AppRoutes.changePassword),
@@ -498,6 +581,52 @@ class SecurityDevicesScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  static String _groupFingerprint(String value) {
+    final normalized = value.replaceAll(':', '').toUpperCase();
+    return RegExp(
+      '.{1,4}',
+    ).allMatches(normalized).map((match) => match.group(0)).join(' ');
+  }
+}
+
+class _SecurityMetric extends StatelessWidget {
+  const _SecurityMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 138),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: .42),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: colors.primary),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text(label, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
+        ],
       ),
     );
   }

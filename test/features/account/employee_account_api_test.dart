@@ -59,6 +59,22 @@ void main() {
               'grace_period_minutes': 15,
               'is_overnight': false,
             },
+            'security': {
+              'institutional_camera_available': true,
+              'location_name': 'City Campus',
+              'device': {
+                'device_id': 'phone-1',
+                'name': 'Pixel 9 Pro',
+                'key_fingerprint': 'aabbccdd',
+                'enrolled_at': '2026-09-19T08:00:00+05:00',
+              },
+              'trust_30_days': {
+                'total_scans': 14,
+                'average_score': 96.5,
+                'high_trust_count': 13,
+                'corroborated_count': 4,
+              },
+            },
           },
         },
       ),
@@ -74,6 +90,10 @@ void main() {
     expect(profile.designationGrade, 'BPS-18');
     expect(profile.canMarkAttendance, isTrue);
     expect(profile.assignedShift?.name, 'Morning Shift');
+    expect(profile.security.institutionalCameraAvailable, isTrue);
+    expect(profile.security.deviceName, 'Pixel 9 Pro');
+    expect(profile.security.averageTrustScore, 96.5);
+    expect(profile.security.corroboratedCount, 4);
     final options =
         verify(
               () => dio.get<dynamic>(

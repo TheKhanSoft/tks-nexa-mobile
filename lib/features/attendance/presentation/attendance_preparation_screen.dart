@@ -110,8 +110,7 @@ class _AttendancePreparationScreenState
     setState(() => _faceCapture = null);
     final cameraResult = result.cameraCorroboration;
     if (cameraResult != null &&
-        (cameraResult.status ==
-                CameraCorroborationStatus.challengeRequired ||
+        (cameraResult.status == CameraCorroborationStatus.challengeRequired ||
             cameraResult.status ==
                 CameraCorroborationStatus.waitingForCamera)) {
       context.push(AppRoutes.cameraVerification, extra: cameraResult);
@@ -437,9 +436,7 @@ class _ChallengeReadinessCard extends StatelessWidget {
     return Card(
       child: switch (challenge) {
         AsyncData(:final value) => ListTile(
-          leading: const CircleAvatar(
-            child: Icon(Icons.policy_rounded),
-          ),
+          leading: const CircleAvatar(child: Icon(Icons.policy_rounded)),
           title: Text(
             value.location?.name ?? 'Attendance policy ready',
             style: const TextStyle(fontWeight: FontWeight.w800),
@@ -449,7 +446,10 @@ class _ChallengeReadinessCard extends StatelessWidget {
             '${value.policy.polygonGeofenceEnabled ? ' · Polygon geofence' : ''}'
             '${value.policy.cameraVerificationEnabled ? ' · Camera corroboration' : ''}',
           ),
-          trailing: const Icon(Icons.verified_rounded, color: AppPalette.emerald),
+          trailing: const Icon(
+            Icons.verified_rounded,
+            color: AppPalette.emerald,
+          ),
         ),
         AsyncError(:final error) => ListTile(
           leading: Icon(
@@ -472,7 +472,9 @@ class _ChallengeReadinessCard extends StatelessWidget {
           ),
         ),
         _ => const ListTile(
-          leading: CircleAvatar(child: CircularProgressIndicator(strokeWidth: 2)),
+          leading: CircleAvatar(
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
           title: Text(
             'Preparing secure attendance',
             style: TextStyle(fontWeight: FontWeight.w800),

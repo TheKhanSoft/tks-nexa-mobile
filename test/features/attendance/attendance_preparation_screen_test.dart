@@ -29,6 +29,7 @@ void main() {
       ),
     );
 
+    await tester.scrollUntilVisible(find.text('Fresh location'), 250);
     expect(find.text('Fresh location'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Temporary face capture'), 250);
     expect(find.text('Temporary face capture'), findsOneWidget);

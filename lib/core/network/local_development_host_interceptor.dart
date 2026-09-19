@@ -4,10 +4,15 @@ import 'package:flutter/foundation.dart';
 /// Connects local development subdomains through loopback while preserving the
 /// logical Host header Laravel uses to resolve central and tenant domains.
 class LocalDevelopmentHostInterceptor extends Interceptor {
-  LocalDevelopmentHostInterceptor({this.connectHost, this.connectPort});
+  LocalDevelopmentHostInterceptor({
+    this.connectHost,
+    this.connectPort,
+    this.connectScheme = 'http',
+  });
 
   final String? connectHost;
   final int? connectPort;
+  final String connectScheme;
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -28,7 +33,7 @@ class LocalDevelopmentHostInterceptor extends Interceptor {
             ? '${requestUri.host}:${requestUri.port}'
             : requestUri.host;
         options.baseUrl = Uri(
-          scheme: requestUri.scheme,
+          scheme: connectScheme,
           host: bridgeHost,
           port: connectPort,
         ).toString();
@@ -42,7 +47,7 @@ class LocalDevelopmentHostInterceptor extends Interceptor {
         ? '${requestUri.host}:${requestUri.port}'
         : requestUri.host;
     options.baseUrl = Uri(
-      scheme: requestUri.scheme,
+      scheme: connectScheme,
       host: connectHost ?? 'localhost',
       port: connectPort ?? (requestUri.hasPort ? requestUri.port : null),
     ).toString();

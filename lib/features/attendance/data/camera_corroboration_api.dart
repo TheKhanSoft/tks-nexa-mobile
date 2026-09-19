@@ -17,9 +17,7 @@ class CameraCorroborationApi implements CameraCorroborationService {
     try {
       final response = await _dio.get<dynamic>(
         'attendance/camera-verification/${Uri.encodeComponent(cameraChallengeId)}',
-        options: Options(
-          headers: {'Authorization': 'Bearer $_accessToken'},
-        ),
+        options: Options(headers: {'Authorization': 'Bearer $_accessToken'}),
       );
       final data = response.data;
       if (data is! Map) throw const FormatException();

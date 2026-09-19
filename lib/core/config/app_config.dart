@@ -26,6 +26,7 @@ class AppConfig {
     required this.allowMockSecurity,
     this.developmentConnectHost,
     this.developmentConnectPort,
+    this.developmentConnectScheme = 'http',
   });
 
   factory AppConfig.fromEnvironment() {
@@ -42,6 +43,10 @@ class AppConfig {
       developmentConnectPort: const String.fromEnvironment(
         'DEVELOPMENT_CONNECT_PORT',
       ),
+      developmentConnectScheme: const String.fromEnvironment(
+        'DEVELOPMENT_CONNECT_SCHEME',
+        defaultValue: 'http',
+      ),
       allowMockSecurity: const bool.fromEnvironment(
         'ALLOW_MOCK_SECURITY',
         defaultValue: false,
@@ -57,6 +62,7 @@ class AppConfig {
     required String mobileApiSecret,
     String developmentConnectHost = '',
     String developmentConnectPort = '',
+    String developmentConnectScheme = 'http',
     bool allowMockSecurity = false,
     bool isReleaseMode = false,
   }) {
@@ -116,6 +122,9 @@ class AppConfig {
 
     final normalizedConnectHost = developmentConnectHost.trim();
     final normalizedConnectPort = developmentConnectPort.trim();
+    final normalizedConnectScheme = developmentConnectScheme
+        .trim()
+        .toLowerCase();
     int? parsedConnectPort;
     if (normalizedConnectHost.isNotEmpty || normalizedConnectPort.isNotEmpty) {
       final connectUri = Uri.tryParse('http://$normalizedConnectHost');
@@ -132,6 +141,12 @@ class AppConfig {
           'Development API bridge must have a valid host and TCP port and is allowed only in development.',
         );
       }
+      if (normalizedConnectScheme != 'http' &&
+          normalizedConnectScheme != 'https') {
+        throw const AppConfigurationException(
+          'Development API bridge scheme must be http or https.',
+        );
+      }
     }
 
     return AppConfig(
@@ -144,6 +159,7 @@ class AppConfig {
           ? null
           : normalizedConnectHost,
       developmentConnectPort: parsedConnectPort,
+      developmentConnectScheme: normalizedConnectScheme,
     );
   }
 
@@ -154,6 +170,7 @@ class AppConfig {
   final bool allowMockSecurity;
   final String? developmentConnectHost;
   final int? developmentConnectPort;
+  final String developmentConnectScheme;
 
   bool get allowsLocalHttp => environment == AppEnvironment.development;
 

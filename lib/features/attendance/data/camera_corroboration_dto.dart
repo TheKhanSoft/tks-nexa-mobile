@@ -41,16 +41,17 @@ class CameraCorroborationDto {
     final data = json['data'] is Map
         ? Map<String, dynamic>.from(json['data'] as Map)
         : const <String, dynamic>{};
+    final payload = <String, dynamic>{...json, ...data};
     if (status == 'camera_verification_required') {
       return fromStatusJson({
-        ...data,
+        ...payload,
         'status': 'challenge_required',
         'message': json['message'],
       });
     }
     if (status == 'accepted' &&
-        (data['camera_corroboration'] == 'already_verified' ||
-            data['camera_corroboration'] == 'already_corroborated')) {
+        (payload['camera_corroboration'] == 'already_verified' ||
+            payload['camera_corroboration'] == 'already_corroborated')) {
       return const CameraCorroborationResult(
         status: CameraCorroborationStatus.alreadyCorroborated,
       );

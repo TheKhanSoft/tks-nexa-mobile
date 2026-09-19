@@ -78,6 +78,7 @@ class MobileAttendanceApi implements MobileAttendanceService {
         data: {
           'device_id': deviceId,
           'public_key': key.publicKey,
+          'key_fingerprint': key.fingerprint,
           'platform': key.platform,
           'device_model': key.deviceModel,
           'app_version': appVersion,

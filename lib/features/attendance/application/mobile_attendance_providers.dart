@@ -45,28 +45,29 @@ final deviceSecurityServiceProvider = Provider<DeviceSecurityService>(
   (ref) => const PlatformDeviceSecurityService(),
 );
 
-final attendanceChallengeProvider = FutureProvider.autoDispose<AttendanceChallenge>((
-  ref,
-) async {
-  final organization = ref.watch(organizationSessionProvider).value;
-  if (organization == null) throw StateError('Organization is required.');
-  final deviceId = await SecureDeviceIdentity(
-    ref.watch(secureStorageServiceProvider),
-    organization.code,
-  ).getOrCreate();
-  final key = await ref.watch(deviceSecurityServiceProvider).getDeviceKey();
-  if (key != null) {
-    final package = await PackageInfo.fromPlatform();
-    await ref.watch(mobileAttendanceServiceProvider).registerDevice(
-      deviceId: deviceId,
-      key: key,
-      appVersion: '${package.version}+${package.buildNumber}',
-    );
-  }
-  return ref
-      .watch(mobileAttendanceServiceProvider)
-      .requestChallenge(deviceId: deviceId);
-});
+final attendanceChallengeProvider =
+    FutureProvider.autoDispose<AttendanceChallenge>((ref) async {
+      final organization = ref.watch(organizationSessionProvider).value;
+      if (organization == null) throw StateError('Organization is required.');
+      final deviceId = await SecureDeviceIdentity(
+        ref.watch(secureStorageServiceProvider),
+        organization.code,
+      ).getOrCreate();
+      final key = await ref.watch(deviceSecurityServiceProvider).getDeviceKey();
+      if (key != null) {
+        final package = await PackageInfo.fromPlatform();
+        await ref
+            .watch(mobileAttendanceServiceProvider)
+            .registerDevice(
+              deviceId: deviceId,
+              key: key,
+              appVersion: '${package.version}+${package.buildNumber}',
+            );
+      }
+      return ref
+          .watch(mobileAttendanceServiceProvider)
+          .requestChallenge(deviceId: deviceId);
+    });
 
 final faceBiometricProfileProvider =
     AsyncNotifierProvider<FaceBiometricProfileController, FaceBiometricProfile>(
@@ -170,9 +171,7 @@ class AttendanceSubmissionController
       final deviceEvidence = await ref
           .read(deviceSecurityServiceProvider)
           .createEvidence(
-            canonicalPayload: unsignedRequest.canonicalPayload(
-              challenge.nonce,
-            ),
+            canonicalPayload: unsignedRequest.canonicalPayload(challenge.nonce),
             integrityNonce: challenge.nonce,
             requireIntegrity: challenge.policy.requireAppIntegrity,
           );

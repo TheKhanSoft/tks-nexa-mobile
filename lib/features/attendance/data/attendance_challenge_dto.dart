@@ -31,9 +31,7 @@ class AttendanceChallengeDto {
         serverTimestamp: serverTimestamp,
         expiresAt: expiresAt,
         policy: AttendanceChallengePolicy(
-          polygonGeofenceEnabled: _bool(
-            policyJson['polygon_geofence_enabled'],
-          ),
+          polygonGeofenceEnabled: _bool(policyJson['polygon_geofence_enabled']),
           requireAppIntegrity: _bool(policyJson['require_app_integrity']),
           cameraVerificationEnabled: _bool(
             policyJson['camera_verification_enabled'],
@@ -63,18 +61,20 @@ class AttendanceChallengeDto {
   static List<AttendanceChallengePoint> _polygon(Object? value) {
     if (value == null) return const [];
     if (value is! List) throw const FormatException();
-    return value.map((point) {
-      if (point is! List || point.length < 2) throw const FormatException();
-      final latitude = point[0];
-      final longitude = point[1];
-      if (latitude is! num || longitude is! num) {
-        throw const FormatException();
-      }
-      return AttendanceChallengePoint(
-        latitude.toDouble(),
-        longitude.toDouble(),
-      );
-    }).toList(growable: false);
+    return value
+        .map((point) {
+          if (point is! List || point.length < 2) throw const FormatException();
+          final latitude = point[0];
+          final longitude = point[1];
+          if (latitude is! num || longitude is! num) {
+            throw const FormatException();
+          }
+          return AttendanceChallengePoint(
+            latitude.toDouble(),
+            longitude.toDouble(),
+          );
+        })
+        .toList(growable: false);
   }
 
   static Map<String, dynamic> _map(Object? value) {

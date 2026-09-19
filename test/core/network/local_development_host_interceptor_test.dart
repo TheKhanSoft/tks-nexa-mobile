@@ -50,6 +50,29 @@ void main() {
     verify(() => handler.next(options)).called(1);
   });
 
+  test('can route logical HTTP tenant URLs through a secure web bridge', () {
+    final interceptor = LocalDevelopmentHostInterceptor(
+      connectHost: 'api-tunnel.example.test',
+      connectPort: 443,
+      connectScheme: 'https',
+    );
+    final options = RequestOptions(
+      baseUrl: 'http://awkum.localhost:8000/',
+      path: 'api/mobile/profile',
+    );
+    final handler = _MockRequestInterceptorHandler();
+
+    interceptor.onRequest(options, handler);
+
+    expect(options.uri.scheme, 'https');
+    expect(options.uri.host, 'api-tunnel.example.test');
+    expect(options.uri.port, 443);
+    // VM tests exercise the native branch. Flutter web carries the same
+    // logical value as X-Development-Host because browsers forbid Host.
+    expect(options.headers['Host'], 'awkum.localhost:8000');
+    verify(() => handler.next(options)).called(1);
+  });
+
   test('uses the same mobile signer for central and tenant clients', () {
     final config = AppConfig.fromValues(
       environment: 'development',

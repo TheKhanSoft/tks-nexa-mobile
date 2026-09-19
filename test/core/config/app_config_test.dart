@@ -61,10 +61,12 @@ void main() {
         mobileApiSecret: validSecret,
         developmentConnectHost: '10.10.190.46',
         developmentConnectPort: '8001',
+        developmentConnectScheme: 'https',
       );
 
       expect(config.developmentConnectHost, '10.10.190.46');
       expect(config.developmentConnectPort, 8001);
+      expect(config.developmentConnectScheme, 'https');
     });
 
     test('rejects an incomplete development API bridge', () {

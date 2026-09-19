@@ -58,18 +58,78 @@ void main() {
     expect(options.headers?['Authorization'], 'Bearer access-token');
   });
 
-  test('submits only compact verified attendance evidence', () async {
+  test('requests and parses a policy-bound attendance challenge', () async {
     final dio = _MockDio();
     final api = MobileAttendanceApi(dio, 'access-token');
     when(
       () => dio.post<dynamic>(
-        MobileAttendanceApi.markAttendancePath,
+        MobileAttendanceApi.challengePath,
         options: any(named: 'options'),
         data: any<dynamic>(named: 'data'),
       ),
     ).thenAnswer(
       (_) async => Response<dynamic>(
-        requestOptions: RequestOptions(path: 'attendance/mark'),
+        requestOptions: RequestOptions(path: 'attendance/challenge'),
+        statusCode: 200,
+        data: {
+          'status': 'success',
+          'data': {
+            'challenge_id': 'challenge-1',
+            'nonce': 'nonce-1',
+            'server_timestamp': '2026-09-19T06:15:00Z',
+            'expires_at': '2026-09-19T06:20:00Z',
+            'policy': {
+              'polygon_geofence_enabled': true,
+              'require_app_integrity': false,
+              'camera_verification_enabled': true,
+            },
+            'location': {
+              'id': 'campus-1',
+              'name': 'Main Campus',
+              'min_accuracy_meters': 20,
+              'polygon': [
+                [34.1989, 72.0404],
+                [34.1995, 72.0420],
+                [34.1978, 72.0431],
+              ],
+            },
+          },
+        },
+      ),
+    );
+
+    final challenge = await api.requestChallenge(deviceId: 'device-1');
+
+    expect(challenge.id, 'challenge-1');
+    expect(challenge.policy.polygonGeofenceEnabled, isTrue);
+    expect(challenge.policy.cameraVerificationEnabled, isTrue);
+    expect(challenge.location?.minimumAccuracyM, 20);
+    expect(challenge.location?.polygon, hasLength(3));
+    final options =
+        verify(
+              () => dio.post<dynamic>(
+                MobileAttendanceApi.challengePath,
+                options: captureAny(named: 'options'),
+                data: any<dynamic>(named: 'data'),
+              ),
+            ).captured.single
+            as Options;
+    expect(options.headers?['Authorization'], 'Bearer access-token');
+    expect(options.headers?['X-Device-ID'], 'device-1');
+  });
+
+  test('submits only compact verified attendance evidence', () async {
+    final dio = _MockDio();
+    final api = MobileAttendanceApi(dio, 'access-token');
+    when(
+      () => dio.post<dynamic>(
+        MobileAttendanceApi.submitAttendancePath,
+        options: any(named: 'options'),
+        data: any<dynamic>(named: 'data'),
+      ),
+    ).thenAnswer(
+      (_) async => Response<dynamic>(
+        requestOptions: RequestOptions(path: 'attendance/submit'),
         statusCode: 200,
         data: {
           'status': 'success',
@@ -102,6 +162,7 @@ void main() {
         1726661100000,
         isUtc: true,
       ),
+      challengeId: 'challenge-1',
     );
 
     final result = await api.markAttendance(request);
@@ -110,7 +171,7 @@ void main() {
     final captured =
         verify(
               () => dio.post<dynamic>(
-                MobileAttendanceApi.markAttendancePath,
+                MobileAttendanceApi.submitAttendancePath,
                 options: any(named: 'options'),
                 data: captureAny<dynamic>(named: 'data'),
               ),
@@ -119,7 +180,10 @@ void main() {
     expect(captured['verified_method'], 'face_biometric');
     expect(captured['confidence_score'], .91);
     expect(captured['liveness_passed'], isTrue);
+    expect(captured['challenge_id'], 'challenge-1');
     expect(captured['latitude'], 34.1989);
+    expect(captured['location'], isA<Map<String, Object>>());
+    expect(captured['biometrics'], isA<Map<String, Object>>());
     expect(captured, isNot(contains('embedding')));
     expect(captured, isNot(contains('image')));
   });

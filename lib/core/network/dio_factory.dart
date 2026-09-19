@@ -50,6 +50,7 @@ class DioFactory {
           LocalDevelopmentHostInterceptor(
             connectHost: config.developmentConnectHost,
             connectPort: config.developmentConnectPort,
+            connectScheme: config.developmentConnectScheme,
           ),
         MobileRequestSignatureInterceptor(secret: config.mobileApiSecret),
         SafeNetworkInterceptor(),

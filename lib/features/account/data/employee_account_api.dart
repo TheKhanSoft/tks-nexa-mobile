@@ -22,6 +22,9 @@ class EmployeeAccountApi {
       final reportingTo = _asOptionalMap(employee['reporting_to']);
       final permissions = _asOptionalMap(data['attendance_permissions']);
       final shift = _asOptionalMap(data['assigned_shift']);
+      final security = _asOptionalMap(data['security']);
+      final device = _asOptionalMap(security?['device']);
+      final trust = _asOptionalMap(security?['trust_30_days']);
       return EmployeeProfile(
         name: _string(employee['full_name'], fallback: user['name']),
         email: _string(user['email']),
@@ -68,6 +71,19 @@ class EmployeeAccountApi {
                     : 0,
                 isOvernight: shift['is_overnight'] == true,
               ),
+        security: EmployeeSecurityProfile(
+          institutionalCameraAvailable:
+              security?['institutional_camera_available'] == true,
+          locationName: _string(security?['location_name']),
+          deviceId: _string(device?['device_id']),
+          deviceName: _string(device?['name']),
+          keyFingerprint: _string(device?['key_fingerprint']),
+          deviceEnrolledAt: _dateTime(device?['enrolled_at']),
+          totalScans: _integer(trust?['total_scans']),
+          averageTrustScore: _double(trust?['average_score']),
+          highTrustCount: _integer(trust?['high_trust_count']),
+          corroboratedCount: _integer(trust?['corroborated_count']),
+        ),
       );
     } on DioException catch (error) {
       throw _failureFor(error, fallback: 'Unable to load your profile.');
@@ -151,5 +167,14 @@ class EmployeeAccountApi {
         ? value
         : fallback;
     return selected is String ? selected.trim() : '';
+  }
+
+  static int _integer(Object? value) => value is num ? value.toInt() : 0;
+
+  static double? _double(Object? value) =>
+      value is num ? value.toDouble() : null;
+
+  static DateTime? _dateTime(Object? value) {
+    return value is String ? DateTime.tryParse(value)?.toLocal() : null;
   }
 }
