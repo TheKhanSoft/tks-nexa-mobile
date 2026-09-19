@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TKS Nexa - Development",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": [
+        "--dart-define-from-file=config/development.json"
+      ]
+    },
+    {
+      "name": "TKS Nexa - Staging",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "toolArgs": [
+        "--dart-define-from-file=config/staging.json"
+      ]
+    }
+  ]
+}

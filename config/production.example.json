@@ -1,0 +1,7 @@
+{
+  "APP_ENV": "production",
+  "DISCOVERY_BASE_URL": "https://api.example.invalid/api",
+  "TENANT_API_ALLOWED_HOST_SUFFIXES": "myattendance.example.invalid",
+  "MOBILE_API_SECRET": "replace-with-64-character-hex-secret",
+  "ALLOW_MOCK_SECURITY": false
+}

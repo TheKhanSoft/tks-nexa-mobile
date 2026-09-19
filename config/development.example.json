@@ -1,0 +1,9 @@
+{
+  "APP_ENV": "development",
+  "DISCOVERY_BASE_URL": "http://api.localhost:8000",
+  "TENANT_API_ALLOWED_HOST_SUFFIXES": "localhost",
+  "DEVELOPMENT_CONNECT_HOST": "",
+  "DEVELOPMENT_CONNECT_PORT": "",
+  "MOBILE_API_SECRET": "replace-with-64-character-hex-secret",
+  "ALLOW_MOCK_SECURITY": true
+}
