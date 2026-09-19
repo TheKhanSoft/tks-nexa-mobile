@@ -17,6 +17,14 @@
       "toolArgs": [
         "--dart-define-from-file=config/staging.json"
       ]
+    },
+    {
+      "name": "TKS Nexa - Production (Online)",
+      "request": "launch",
+      "type": "dart",
+      "toolArgs": [
+        "--dart-define-from-file=config/production.json"
+      ]
     }
   ]
 }
