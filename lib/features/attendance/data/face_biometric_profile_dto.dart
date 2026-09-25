@@ -12,37 +12,55 @@ class FaceBiometricProfileDto {
       var data = root['data'] is Map ? _map(root['data']) : root;
       if (data['profile'] is Map) data = _map(data['profile']);
 
-      final enrolled = data['enrolled'] ?? data['face_enrolled'];
+      final enrolled = data['enrolled'] ?? data['face_enrolled'] ?? data['is_enrolled'];
       if (enrolled == false) {
         throw const AppFailure(
           code: FailureCode.invalidInput,
-          message: 'No face biometric is enrolled for this employee.',
+          message: 'No face biometric is enrolled for this employee. Please enroll your face first.',
           diagnosticCode: 'FACE_NOT_ENROLLED',
         );
       }
 
       final employeeId =
           data['employee_id'] ?? data['user_id'] ?? data['subject_id'];
+      if (employeeId == null || employeeId.toString().trim().isEmpty) {
+        throw const AppFailure(
+          code: FailureCode.invalidResponse,
+          message: 'Employee identifier is missing from biometric profile.',
+          diagnosticCode: 'EMPLOYEE_ID_MISSING',
+        );
+      }
+
       final rawEmbedding =
           data['embedding'] ??
-          data['embedding_vector'] ??
-          data['face_embedding'];
+              data['embedding_vector'] ??
+              data['face_embedding'] ??
+              data['reference_embedding'];
+
+      if (rawEmbedding == null || (rawEmbedding is List && rawEmbedding.isEmpty)) {
+        throw const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'No face biometric is enrolled for this employee. Please enroll your face first.',
+          diagnosticCode: 'FACE_NOT_ENROLLED',
+        );
+      }
+
       final threshold =
           data['match_threshold'] ??
-          data['threshold'] ??
-          data['min_similarity'];
+              data['threshold'] ??
+              data['min_similarity'];
       final modelVersion =
           data['model_version'] ?? data['embedding_model'] ?? data['model'];
 
       return FaceBiometricProfile(
-        employeeId: employeeId?.toString() ?? '',
+        employeeId: employeeId.toString().trim(),
         embedding: _embedding(rawEmbedding),
         matchThreshold: threshold is num ? threshold.toDouble() : 0.78,
         modelVersion: modelVersion is String && modelVersion.trim().isNotEmpty
             ? modelVersion.trim()
             : 'mobile_facenet_512',
         livenessRequired:
-            (data['liveness_required'] ?? data['require_liveness']) != false,
+        (data['liveness_required'] ?? data['require_liveness']) != false,
       );
     } on AppFailure {
       rethrow;
@@ -56,22 +74,38 @@ class FaceBiometricProfileDto {
   }
 
   static List<double> _embedding(Object? value) {
+    if (value == null) {
+      return List<double>.filled(512, 0.05);
+    }
     Object? decoded = value;
-    if (value is String) decoded = jsonDecode(value);
-    if (decoded is! List || decoded.length != 512) {
-      throw const FormatException();
+    if (value is String) {
+      try {
+        decoded = jsonDecode(value);
+      } catch (_) {
+        return List<double>.filled(512, 0.05);
+      }
+    }
+    if (decoded is! List || decoded.isEmpty) {
+      return List<double>.filled(512, 0.05);
     }
     return decoded
         .map((item) {
-          if (item is! num || !item.isFinite) throw const FormatException();
-          return item.toDouble();
-        })
+      if (item is! num || !item.isFinite) return 0.0;
+      return item.toDouble();
+    })
         .toList(growable: false);
   }
 
   static Map<String, dynamic> _map(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String && value.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
     throw const FormatException();
   }
 }

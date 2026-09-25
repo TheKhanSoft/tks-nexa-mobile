@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/cosine_face_matcher.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/face_biometric_profile_dto.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/mobile_attendance_api.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/secure_biometric_profile_store.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/secure_device_identity.dart';
@@ -56,6 +58,54 @@ void main() {
             ).captured.single
             as Options;
     expect(options.headers?['Authorization'], 'Bearer access-token');
+  });
+
+  test('parses backend profile response with is_enrolled and reference_embedding', () {
+    final backendResponse = {
+      'status': 'success',
+      'message': 'Facial biometric template ready for on-device verification.',
+      'data': {
+        'employee_id': 125,
+        'employee_code': 'PK-TEST-0123',
+        'full_name': 'Fatima Siddiqui',
+        'is_enrolled': true,
+        'enrolled_at': '2026-09-18T22:05:50+05:00',
+        'model': 'FaceBiometric-EdgeNet-512',
+        'version': '1.0.0',
+        'dimension': 512,
+        'reference_embedding': List<double>.filled(512, 0.04),
+        'match_threshold': 0.75,
+        'liveness_required': true,
+      },
+    };
+
+    final profile = FaceBiometricProfileDto.fromResponse(backendResponse);
+    expect(profile.employeeId, '125');
+  });
+
+  test('parses backend profile response when unenrolled', () {
+    final backendUnenrolledResponse = {
+      'status': 'success',
+      'message': 'No facial template enrolled.',
+      'data': {
+        'employee_id': 125,
+        'employee_code': 'PK-TEST-0123',
+        'full_name': 'Fatima Siddiqui',
+        'is_enrolled': false,
+        'enrolled_at': null,
+        'model': 'mobile_facenet_512',
+        'version': 'v1',
+        'dimension': 512,
+        'reference_embedding': null,
+        'match_threshold': 0.75,
+        'liveness_required': true,
+      },
+    };
+
+    expect(
+      () => FaceBiometricProfileDto.fromResponse(backendUnenrolledResponse),
+      throwsA(isA<AppFailure>()),
+    );
   });
 
   test('requests and parses a policy-bound attendance challenge', () async {
@@ -143,7 +193,6 @@ void main() {
       ),
     );
     final request = AttendanceMarkRequest(
-      type: AttendanceType.checkIn,
       verification: const LocalFaceVerification(
         similarity: .91,
         threshold: .78,
@@ -181,7 +230,8 @@ void main() {
     expect(captured['confidence_score'], .91);
     expect(captured['liveness_passed'], isTrue);
     expect(captured['challenge_id'], 'challenge-1');
-    expect(captured['latitude'], 34.1989);
+    final locationMap = captured['location'] as Map<String, Object>;
+    expect(locationMap['latitude'], 34.1989);
     expect(captured['location'], isA<Map<String, Object>>());
     expect(captured['biometrics'], isA<Map<String, Object>>());
     expect(captured, isNot(contains('embedding')));
