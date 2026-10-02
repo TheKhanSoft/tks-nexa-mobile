@@ -266,50 +266,97 @@ class MobileAttendanceApi implements MobileAttendanceService {
     return PunchDetailData(
       shiftOverview: ShiftOverview(
         date: date,
-        dayName: 'Shift Day',
+        dayName: 'Scheduled Day',
         formattedDate: date,
-        status: 'In-Office',
-        shiftName: 'General Shift',
-        shiftTiming: '08:00 AM – 04:00 PM',
+        status: 'Scheduled',
+        shiftName: 'Assigned Shift',
+        shiftTiming: 'Standard Working Hours',
         lateArrivalAlert: null,
         metrics: const ShiftOverviewMetrics(
-          totalLogged: '8h 00m',
-          productive: '8h 00m',
-          breakDuration: '0h 00m',
+          totalLogged: '--',
+          productive: '--',
+          breakDuration: '--',
         ),
       ),
-      touchpoints: const [
-        PunchTouchpoint(
-          number: 1,
-          time: '08:00 AM',
-          statusTag: 'Check In',
-          title: 'Face Biometric + Geofence Verified',
-          location: 'Academic Campus Gateway',
-          deviceLabel: 'Mobile App Device',
-        ),
-        PunchTouchpoint(
-          number: 2,
-          time: '04:00 PM',
-          statusTag: 'Check Out',
-          title: 'Biometric Exit Scanner',
-          location: 'Campus Exit Turnstile',
-          deviceLabel: 'Mobile App Device',
-        ),
-      ],
+      touchpoints: const [],
       geofenceAudit: const GeofenceAudit(
-        status: 'Perimeter Cleared',
-        perimeterDetails: 'Radius: 150m Zone • ±4m GPS',
-        hardwareDisplay: 'Authorized Mobile Device',
-        networkGateway: 'Campus Secure Network',
-        ipStamp: 'Verified IP',
+        status: 'No Punch Logged',
+        perimeterDetails: 'No mobile attendance recorded for this date.',
+        hardwareDisplay: 'No hardware registered',
+        networkGateway: 'No active gateway',
+        ipStamp: '—',
       ),
       managerReview: const ManagerReview(
-        statusLabel: 'Verified',
-        approverName: 'Department Manager',
-        approverTitle: 'Line Manager • Approver',
-        note: 'Attendance record verified and logged successfully.',
+        statusLabel: 'Pending',
+        approverName: 'Line Manager',
+        approverTitle: 'Manager • Approver',
+        note: 'Attendance record awaiting telemetry.',
       ),
     );
+  }
+
+  Future<List<Map<String, dynamic>>> fetchMobileLogs({
+    String period = 'this_month',
+    DateTime? fromDate,
+    DateTime? toDate,
+  }) async {
+    try {
+      final queryParams = <String, String>{'period': period};
+      if (fromDate != null) {
+        queryParams['from_date'] =
+            '${fromDate.year}-${fromDate.month.toString().padLeft(2, '0')}-${fromDate.day.toString().padLeft(2, '0')}';
+      }
+      if (toDate != null) {
+        queryParams['to_date'] =
+            '${toDate.year}-${toDate.month.toString().padLeft(2, '0')}-${toDate.day.toString().padLeft(2, '0')}';
+      }
+
+      Response<dynamic> response;
+      try {
+        response = await _dio.get<dynamic>(
+          'v1/attendance/mobile-logs',
+          queryParameters: queryParams,
+          options: _authorized,
+        );
+      } on DioException {
+        try {
+          response = await _dio.get<dynamic>(
+            'attendance/mobile-logs',
+            queryParameters: queryParams,
+            options: _authorized,
+          );
+        } on DioException {
+          response = await _dio.get<dynamic>(
+            'v1/attendance/logs',
+            queryParameters: queryParams,
+            options: _authorized,
+          );
+        }
+      }
+
+      final root = _map(response.data);
+      final data = root['data'];
+      List<dynamic> items = [];
+      if (data is Map) {
+        final dMap = _map(data);
+        if (dMap['data'] is List) {
+          items = dMap['data'] as List;
+        } else if (dMap['logs'] is List) {
+          items = dMap['logs'] as List;
+        } else if (dMap['scans'] is List) {
+          items = dMap['scans'] as List;
+        }
+      } else if (data is List) {
+        items = data;
+      }
+
+      return items
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
   }
 
   static PunchDetailData _parsePunchDetailJson(Object? response, {required String fallbackDate}) {

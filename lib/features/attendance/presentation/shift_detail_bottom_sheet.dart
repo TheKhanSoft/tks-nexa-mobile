@@ -110,25 +110,27 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
     final outTime = record.lastOutFormatted ?? record.lastOut;
 
     final touchpoints = <PunchTouchpoint>[
-      if (inTime != null && inTime.isNotEmpty)
+      if (inTime != null && inTime.isNotEmpty && inTime != '--:--' && inTime != 'Pending')
         PunchTouchpoint(
           number: 1,
           time: inTime,
           statusTag: 'Check In',
           title: 'Face Biometric + Geofence Verified',
-          location: record.locationName ?? 'Academic Campus Gateway',
+          location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
         ),
-      if (outTime != null && outTime.isNotEmpty)
+      if (outTime != null && outTime.isNotEmpty && outTime != '--:--' && outTime != 'Pending' && outTime != inTime)
         PunchTouchpoint(
           number: 2,
           time: outTime,
           statusTag: 'Check Out',
           title: 'Biometric Exit Scanner',
-          location: record.locationName ?? 'Campus Exit Turnstile',
+          location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
         ),
     ];
+
+    final hasPunches = touchpoints.isNotEmpty;
 
     return PunchDetailData(
       shiftOverview: ShiftOverview(
@@ -137,7 +139,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
         formattedDate: dateStr,
         status: record.status,
         shiftName: record.shiftName,
-        shiftTiming: '08:00 AM – 04:00 PM',
+        shiftTiming: 'Standard Schedule',
         lateArrivalAlert: record.isLate
             ? const LateArrivalAlert(
                 isLate: true,
@@ -147,64 +149,77 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
               )
             : null,
         metrics: ShiftOverviewMetrics(
-          totalLogged: record.formattedNetDuration,
-          productive: record.formattedNetDuration,
-          breakDuration: '0h 00m',
+          totalLogged: hasPunches ? record.formattedNetDuration : '--',
+          productive: hasPunches ? record.formattedNetDuration : '--',
+          breakDuration: hasPunches ? '0h 00m' : '--',
         ),
       ),
-      touchpoints: touchpoints.isEmpty
-          ? const [
-              PunchTouchpoint(
-                number: 1,
-                time: '--:--',
-                statusTag: 'Scheduled',
-                title: 'No Punch Logged',
-                location: 'Campus Boundary',
-                deviceLabel: 'Mobile App Device',
-              ),
-            ]
-          : touchpoints,
-      geofenceAudit: GeofenceAudit(
-        status: 'Perimeter Cleared',
-        perimeterDetails: 'Radius: 150m Zone • ±4m GPS',
-        hardwareDisplay: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
-        networkGateway: 'Campus Secure Network',
-        ipStamp: 'Verified IP',
-      ),
-      managerReview: const ManagerReview(
-        statusLabel: 'Verified',
+      touchpoints: touchpoints,
+      geofenceAudit: hasPunches
+          ? GeofenceAudit(
+              status: 'Perimeter Cleared',
+              perimeterDetails: record.latitude != null
+                  ? 'GPS (${record.latitude!.toStringAsFixed(4)}, ${record.longitude!.toStringAsFixed(4)})'
+                  : 'Verified Perimeter',
+              hardwareDisplay: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
+              networkGateway: 'Campus Secure Network',
+              ipStamp: 'Verified Telemetry',
+            )
+          : const GeofenceAudit(
+              status: 'No Punch Logged',
+              perimeterDetails: 'No mobile attendance recorded for this date.',
+              hardwareDisplay: 'No hardware registered',
+              networkGateway: 'No active gateway',
+              ipStamp: '—',
+            ),
+      managerReview: ManagerReview(
+        statusLabel: hasPunches ? 'Verified' : 'Pending',
         approverName: 'Department Manager',
         approverTitle: 'Line Manager • Approver',
-        note: 'Attendance record verified and logged successfully.',
+        note: hasPunches
+            ? 'Attendance record verified and logged successfully.'
+            : 'No attendance punch recorded for this date.',
       ),
     );
   }
 
   static PunchDetailData _mergeRecordDetail(AttendanceRecord record, PunchDetailData detail) {
     final dynamicDetail = _buildDynamicDetail(record);
+    final chosenTouchpoints = dynamicDetail.touchpoints.isNotEmpty
+        ? dynamicDetail.touchpoints
+        : (detail.touchpoints.isNotEmpty ? detail.touchpoints : const <PunchTouchpoint>[]);
+
+    final hasAnyPunches = chosenTouchpoints.isNotEmpty;
+
     return PunchDetailData(
       shiftOverview: ShiftOverview(
         date: dynamicDetail.shiftOverview.date,
         dayName: record.dayName,
         formattedDate: dynamicDetail.shiftOverview.formattedDate,
         status: record.status,
-        shiftName: record.shiftName,
+        shiftName: record.shiftName.isNotEmpty ? record.shiftName : detail.shiftOverview.shiftName,
         shiftTiming: detail.shiftOverview.shiftTiming,
         lateArrivalAlert: detail.shiftOverview.lateArrivalAlert,
         metrics: ShiftOverviewMetrics(
-          totalLogged: record.formattedNetDuration != '--'
-              ? record.formattedNetDuration
-              : detail.shiftOverview.metrics.totalLogged,
-          productive: record.formattedNetDuration != '--'
-              ? record.formattedNetDuration
-              : detail.shiftOverview.metrics.productive,
-          breakDuration: detail.shiftOverview.metrics.breakDuration,
+          totalLogged: hasAnyPunches
+              ? (record.formattedNetDuration != '--'
+                  ? record.formattedNetDuration
+                  : (detail.shiftOverview.metrics.totalLogged != '--' && detail.shiftOverview.metrics.totalLogged != '8h 00m'
+                      ? detail.shiftOverview.metrics.totalLogged
+                      : '--'))
+              : '--',
+          productive: hasAnyPunches
+              ? (record.formattedNetDuration != '--'
+                  ? record.formattedNetDuration
+                  : (detail.shiftOverview.metrics.productive != '--' && detail.shiftOverview.metrics.productive != '8h 00m'
+                      ? detail.shiftOverview.metrics.productive
+                      : '--'))
+              : '--',
+          breakDuration: hasAnyPunches ? detail.shiftOverview.metrics.breakDuration : '--',
         ),
       ),
-      touchpoints: dynamicDetail.touchpoints.length >= 2
-          ? dynamicDetail.touchpoints
-          : detail.touchpoints,
-      geofenceAudit: detail.geofenceAudit,
+      touchpoints: chosenTouchpoints,
+      geofenceAudit: hasAnyPunches ? detail.geofenceAudit : dynamicDetail.geofenceAudit,
       managerReview: detail.managerReview,
     );
   }
@@ -356,42 +371,109 @@ class _PunchDetailBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 14),
-        for (var i = 0; i < detail.touchpoints.length; i++)
-          _TimelineNode(
-            tp: detail.touchpoints[i],
-            isLast: i == detail.touchpoints.length - 1,
-          ),
+        if (detail.touchpoints.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.event_busy_rounded, size: 24, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'No punches recorded for this date',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Attendance was not logged on this day.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          for (var i = 0; i < detail.touchpoints.length; i++)
+            _TimelineNode(
+              tp: detail.touchpoints[i],
+              isLast: i == detail.touchpoints.length - 1,
+            ),
         const SizedBox(height: 20),
         // Geofence Audit Section
         const Text('Geofence Audit', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
         const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.shield_rounded, size: 16, color: Color(0xFF10B981)),
-                  const SizedBox(width: 8),
-                  Text(geo.status, style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.w900, fontSize: 12)),
-                  const Spacer(),
-                  Text(geo.perimeterDetails, style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
+        Builder(builder: (context) {
+          final isCleared = geo.status.toLowerCase().contains('cleared') ||
+              geo.status.toLowerCase().contains('verified');
+          final statusColor = isCleared
+              ? const Color(0xFF10B981)
+              : (detail.touchpoints.isEmpty ? theme.colorScheme.onSurfaceVariant : const Color(0xFFF59E0B));
+          final statusIcon = isCleared
+              ? Icons.shield_rounded
+              : (detail.touchpoints.isEmpty ? Icons.info_outline_rounded : Icons.warning_amber_rounded);
+
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(statusIcon, size: 16, color: statusColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      geo.status,
+                      style: TextStyle(color: statusColor, fontWeight: FontWeight.w900, fontSize: 12),
+                    ),
+                    const Spacer(),
+                    Text(
+                      geo.perimeterDetails,
+                      style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (record.latitude != null && record.longitude != null) ...[
+                  _AuditDetailRow(
+                    icon: Icons.pin_drop_rounded,
+                    label: 'GPS Coordinates',
+                    value: '${record.latitude!.toStringAsFixed(5)}, ${record.longitude!.toStringAsFixed(5)}',
+                  ),
+                  const SizedBox(height: 6),
                 ],
-              ),
-              const SizedBox(height: 12),
-              _AuditDetailRow(icon: Icons.smartphone_rounded, label: 'Authorized Hardware', value: geo.hardwareDisplay),
-              const SizedBox(height: 6),
-              _AuditDetailRow(icon: Icons.wifi_rounded, label: 'Network Gateway', value: geo.networkGateway),
-              const SizedBox(height: 6),
-              _AuditDetailRow(icon: Icons.lan_rounded, label: 'IP Stamp', value: geo.ipStamp),
-            ],
-          ),
-        ),
+                if (record.locationName != null && record.locationName!.isNotEmpty) ...[
+                  _AuditDetailRow(
+                    icon: Icons.place_rounded,
+                    label: 'Captured Place',
+                    value: record.locationName!,
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                _AuditDetailRow(icon: Icons.smartphone_rounded, label: 'Authorized Hardware', value: geo.hardwareDisplay),
+                const SizedBox(height: 6),
+                _AuditDetailRow(icon: Icons.wifi_rounded, label: 'Network Gateway', value: geo.networkGateway),
+                const SizedBox(height: 6),
+                _AuditDetailRow(icon: Icons.lan_rounded, label: 'IP Stamp', value: geo.ipStamp),
+              ],
+            ),
+          );
+        }),
         const SizedBox(height: 20),
         // Manager Review Section
         Container(

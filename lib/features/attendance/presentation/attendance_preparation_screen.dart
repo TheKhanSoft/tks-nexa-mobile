@@ -9,10 +9,12 @@ import 'package:tks_nexa_attendance/features/account/application/account_provide
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_hardware_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_challenge.dart';
+import 'package:tks_nexa_attendance/features/attendance/domain/attendance_mark.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/camera_corroboration.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_biometric_profile.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/location_evidence.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/biometric_scanning_verification_dialog.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/face_capture_screen.dart';
 
 class AttendancePreparationScreen extends ConsumerStatefulWidget {
@@ -190,6 +192,7 @@ class _AttendancePreparationScreenState
     if (_location == null ||
         !_location!.isFreshAt(now, maximumAge: _maximumLocationAge)) {
       await _captureLocation();
+      if (!mounted) return;
     }
 
     final location = _location;
@@ -199,9 +202,15 @@ class _AttendancePreparationScreenState
         !_locationReady(_requiredLocationAccuracyM)) {
       return;
     }
-    final result = await ref
-        .read(attendanceSubmissionProvider.notifier)
-        .submit(capture: capture, location: location);
+    final result = await showDialog<AttendanceMarkResult?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => BiometricScanningVerificationDialog(
+        capture: capture,
+        location: location,
+        onUploadPhoto: _captureAndUploadPhoto,
+      ),
+    );
     if (!mounted || result == null) return;
     _discardFaceCapture(_faceCapture);
     setState(() => _faceCapture = null);
@@ -213,24 +222,6 @@ class _AttendancePreparationScreenState
       context.push(AppRoutes.cameraVerification, extra: cameraResult);
       return;
     }
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.verified_rounded, color: AppPalette.emerald),
-        title: const Text('Attendance Recorded'),
-        content: Text(
-          result.trustScore == null
-              ? result.message
-              : '${result.message}\n\nTrust: ${result.trustScore}/100 (${result.trustLevel ?? 'assessed'})',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override

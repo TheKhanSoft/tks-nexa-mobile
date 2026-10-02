@@ -225,6 +225,7 @@ class AttendanceSubmissionController
               challengeId: challenge.id,
               deviceSignature: deviceEvidence.signature,
               integrityToken: integrityToken,
+              snapshotBase64: 'data:image/jpeg;base64,${base64Encode(capture.bytes)}',
             ),
           );
       await ref.read(localSelfieStorageProvider).saveSelfie(

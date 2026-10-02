@@ -41,13 +41,17 @@ class AttendanceMarkRequest {
 
   Map<String, Object> toJson() {
     final locName = locationName ?? location.locationName;
+    final rawSim = verification.similarity;
+    final clampedScore = (rawSim.isFinite && !rawSim.isNaN)
+        ? (rawSim < 0.0 ? 0.0 : rawSim)
+        : 0.0;
 
     return {
       'challenge_id': challengeId,
       'verified_method': 'face_biometric',
-      'verification_method': 'on_device_neural_engine',
-      'confidence_score': verification.similarity,
-      'similarity_score': verification.similarity,
+      'verification_method': 'FaceBiometric-EdgeNet-512',
+      'confidence_score': clampedScore,
+      'similarity_score': clampedScore,
       'match_threshold': 0.70,
       if (verification.liveVector != null)
         'face_vector': verification.liveVector!,
@@ -83,9 +87,9 @@ class AttendanceMarkRequest {
         'is_mocked': location.isMocked,
       },
       'biometrics': <String, Object>{
-        'similarity_score': verification.similarity,
+        'similarity_score': clampedScore,
         'liveness_verified': verification.livenessPassed,
-        'verification_method': 'on_device_neural_engine',
+        'verification_method': 'FaceBiometric-EdgeNet-512',
       },
     };
   }
