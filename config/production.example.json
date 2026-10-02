@@ -1,7 +1,7 @@
 {
   "APP_ENV": "production",
-  "DISCOVERY_BASE_URL": "https://api.example.invalid/api",
-  "TENANT_API_ALLOWED_HOST_SUFFIXES": "myattendance.example.invalid",
-  "MOBILE_API_SECRET": "replace-with-64-character-hex-secret",
+  "DISCOVERY_BASE_URL": "https://api.tksnexa.me",
+  "TENANT_API_ALLOWED_HOST_SUFFIXES": "tksnexa.me",
+  "MOBILE_API_SECRET": "b8a7177f44e9529403c5979a27a201cff325213fb18f89c0942d7ffb2a24313e",
   "ALLOW_MOCK_SECURITY": false
 }

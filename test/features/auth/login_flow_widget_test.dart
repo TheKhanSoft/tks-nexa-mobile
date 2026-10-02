@@ -8,6 +8,8 @@ import 'package:tks_nexa_attendance/features/account/data/employee_account_api.d
 import 'package:tks_nexa_attendance/features/account/domain/employee_profile.dart';
 import 'package:tks_nexa_attendance/features/account/presentation/employee_avatar.dart';
 import 'package:tks_nexa_attendance/features/auth/application/auth_providers.dart';
+import 'package:tks_nexa_attendance/features/auth/domain/auth_session.dart';
+import 'package:tks_nexa_attendance/features/auth/domain/authentication_service.dart';
 import 'package:tks_nexa_attendance/features/auth/domain/login_method.dart';
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 
@@ -127,12 +129,11 @@ void main() {
     storage.values['tenant:abc123:face_biometric_profile'] =
         '{"employee_id":"1"}';
     expect(find.text('Hello, Example'), findsOneWidget);
-    expect(find.text('Open camera attendance'), findsOneWidget);
     expect(find.byKey(const Key('camera_attendance')), findsOneWidget);
     expect(find.text('ABC123'), findsNothing);
     expect(find.textContaining('Environment:'), findsNothing);
 
-    await tester.tap(find.text('Account'));
+    await tester.tap(find.text('Profile'));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(Scrollable).last, const Offset(0, -500));
     await tester.pumpAndSettle();
@@ -151,12 +152,79 @@ void main() {
     await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
 
-    await tester.drag(find.text('Personal information'), const Offset(0, -700));
+    await tester.drag(find.text('Personal information'), const Offset(0, -500));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('logout')));
     await tester.pumpAndSettle();
-    expect(find.text('Choose your organization'), findsOneWidget);
+    expect(find.text('Select Workspace'), findsOneWidget);
     expect(storage.values['tenant:abc123:access_token'], isNull);
     expect(storage.values['tenant:abc123:face_biometric_profile'], isNull);
   });
+
+  testWidgets('redirects to ChangePasswordScreen when employee logs in with temporary password', (tester) async {
+    final repository = FakeOrganizationRepository();
+    final storage = InMemorySecureStorage();
+    final authentication = _TempPasswordAuthService();
+    final accountApi = _MockEmployeeAccountApi();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appConfigProvider.overrideWithValue(
+            AppConfig.fromValues(
+              environment: 'development',
+              discoveryBaseUrl: 'http://api.localhost:8000',
+              tenantHostSuffixes: 'localhost,myattendance.test',
+              mobileApiSecret:
+                  '0000000000000000000000000000000000000000000000000000000000000001',
+            ),
+          ),
+          secureStorageServiceProvider.overrideWithValue(storage),
+          organizationRepositoryProvider.overrideWithValue(repository),
+          authenticationServiceProvider.overrideWithValue(authentication),
+          employeeAccountApiProvider.overrideWithValue(accountApi),
+        ],
+        child: const TksNexaApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('organization_ABC123')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('login_identifier')),
+      'employee@example.test',
+    );
+    await tester.enterText(
+      find.byKey(const Key('login_password')),
+      'temp-password',
+    );
+    await tester.ensureVisible(find.byKey(const Key('login_submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('login_submit')));
+    await tester.pumpAndSettle();
+
+    // Verify redirected to Change Password screen
+    expect(find.text('Change password'), findsOneWidget);
+    expect(find.text('Temporary Password Detected'), findsOneWidget);
+    expect(find.textContaining('Temporary password detected'), findsWidgets);
+  });
+}
+
+class _TempPasswordAuthService implements AuthenticationService {
+  @override
+  Future<AuthSession> login({
+    required LoginMethod method,
+    required String identifier,
+    required String password,
+  }) async {
+    return const AuthSession(
+      accessToken: 'temp-session-token',
+      employeeName: 'Temp Employee',
+      mustChangePassword: true,
+      actionRequired: 'change_password',
+      actionMessage: 'Temporary password detected. Please set a new password.',
+    );
+  }
 }

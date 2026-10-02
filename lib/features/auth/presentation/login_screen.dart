@@ -40,7 +40,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           identifier: _identifierController.text,
           password: _passwordController.text,
         );
-    if (succeeded && mounted) context.go(AppRoutes.home);
+    if (!succeeded || !mounted) return;
+
+    final session = ref.read(currentAuthSessionProvider);
+    if (session != null &&
+        (session.mustChangePassword || session.actionRequired == 'change_password')) {
+      final message = session.actionMessage ??
+          session.passwordChangeMessage ??
+          'You are using a temporary password. Please change your password to continue.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      context.go(AppRoutes.changePassword);
+      return;
+    }
+
+    if (session != null &&
+        (!session.hasPhoto || session.actionRequired == 'upload_photo')) {
+      final photoMsg = session.photoWarningMessage ??
+          session.actionMessage ??
+          'Profile picture is missing. Please upload your photo before marking attendance.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.add_a_photo_rounded, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(child: Text(photoMsg)),
+            ],
+          ),
+          backgroundColor: Colors.amber.shade800,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+
+    context.go(AppRoutes.home);
   }
 
   void _changeMethod(LoginMethod method) {
@@ -126,17 +173,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: Column(
                               children: [
                                 Container(
-                                  width: 68,
-                                  height: 68,
+                                  width: 72,
+                                  height: 72,
+                                  padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: .14),
+                                    color: Colors.white.withValues(alpha: .18),
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white24),
+                                    border: Border.all(color: Colors.white38, width: 1.5),
                                   ),
-                                  child: const Icon(
-                                    Icons.apartment_rounded,
-                                    color: Colors.white,
-                                    size: 34,
+                                  child: Image.asset(
+                                    'assets/images/logo_transparent_for_dark_bg.png',
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => Image.asset(
+                                      'assets/images/android-chrome-512x512.png',
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (context, error, stackTrace) => const Icon(
+                                        Icons.apartment_rounded,
+                                        color: Colors.white,
+                                        size: 36,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 14),

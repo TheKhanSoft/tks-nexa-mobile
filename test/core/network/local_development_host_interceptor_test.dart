@@ -23,7 +23,7 @@ void main() {
 
     interceptor.onRequest(options, handler);
 
-    expect(options.uri.host, 'localhost');
+    expect(options.uri.host, '10.0.2.2');
     expect(options.uri.port, 8000);
     expect(options.uri.path, '/mobile/v1/tenant-list');
     expect(options.headers['Host'], 'api.localhost:8000');

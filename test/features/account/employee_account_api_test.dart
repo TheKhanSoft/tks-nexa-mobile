@@ -139,4 +139,41 @@ void main() {
       ),
     ).called(1);
   });
+
+  test('uploads profile photo successfully', () async {
+    final dio = _MockDio();
+    final api = EmployeeAccountApi(dio, 'access-token');
+    when(
+      () => dio.post<dynamic>(
+        'profile/photo',
+        data: any(named: 'data'),
+        options: any(named: 'options'),
+      ),
+    ).thenAnswer(
+      (_) async => Response<dynamic>(
+        requestOptions: RequestOptions(path: 'profile/photo'),
+        statusCode: 200,
+        data: {
+          'status': 'success',
+          'data': {
+            'photo_url': 'https://example.test/storage/photos/emp_1.jpg',
+            'has_photo': true,
+          },
+        },
+      ),
+    );
+
+    final url = await api.uploadProfilePhoto(
+      photoBase64: 'fake-base64-content',
+    );
+
+    expect(url, 'https://example.test/storage/photos/emp_1.jpg');
+    verify(
+      () => dio.post<dynamic>(
+        'profile/photo',
+        data: {'photo_base64': 'fake-base64-content'},
+        options: any(named: 'options'),
+      ),
+    ).called(1);
+  });
 }

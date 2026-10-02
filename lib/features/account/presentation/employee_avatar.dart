@@ -9,6 +9,7 @@ class EmployeeAvatar extends StatelessWidget {
     this.developmentConnectHost,
     this.developmentConnectPort,
     this.size = 88,
+    this.onUploadTap,
     super.key,
   });
 
@@ -18,6 +19,7 @@ class EmployeeAvatar extends StatelessWidget {
   final String? developmentConnectHost;
   final int? developmentConnectPort;
   final double size;
+  final VoidCallback? onUploadTap;
 
   @override
   Widget build(BuildContext context) {
@@ -32,54 +34,89 @@ class EmployeeAvatar extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      color: colorScheme.secondary.withValues(alpha: .14),
+      color: colorScheme.secondaryContainer,
       child: Text(
         _initials(name),
         style: TextStyle(
-          fontSize: size * .27,
+          fontSize: size * .32,
           fontWeight: FontWeight.w800,
-          color: colorScheme.secondary,
+          color: colorScheme.onSecondaryContainer,
         ),
       ),
     );
 
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 4),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
+    return Stack(
+      children: [
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: colorScheme.surfaceContainerHigh,
+            border: Border.all(
+              color: colorScheme.primary.withValues(alpha: 0.3),
+              width: 2.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: source != null
-          ? Image.network(
-              source.url,
-              headers: source.headers,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              webHtmlElementStrategy: source.webHtmlElementStrategy,
-              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                if (wasSynchronouslyLoaded || frame != null) return child;
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    fallback,
-                    const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ],
-                );
-              },
-              errorBuilder: (context, error, stackTrace) => fallback,
-            )
-          : fallback,
+          child: ClipOval(
+            child: source != null
+                ? Image.network(
+                    source.url,
+                    headers: source.headers,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    width: size,
+                    height: size,
+                    gaplessPlayback: true,
+                    webHtmlElementStrategy: source.webHtmlElementStrategy,
+                    frameBuilder:
+                        (context, child, frame, wasSynchronouslyLoaded) {
+                      if (wasSynchronouslyLoaded || frame != null) return child;
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          fallback,
+                          const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ],
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) => fallback,
+                  )
+                : fallback,
+          ),
+        ),
+        if (source == null && onUploadTap != null)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: InkWell(
+              onTap: onUploadTap,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: const Icon(
+                  Icons.add_a_photo_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -141,8 +178,9 @@ _AuthorizedPhotoSource? _authorizedPhotoSource(
   if (authToken == null || authToken.isEmpty) return null;
 
   if (kIsWeb) {
-    final queryParameters = Map<String, String>.from(requestUri.queryParameters)
-      ..putIfAbsent('auth_token', () => authToken);
+    final queryParameters =
+        Map<String, String>.from(requestUri.queryParameters)
+          ..putIfAbsent('auth_token', () => authToken);
     return _AuthorizedPhotoSource(
       url: requestUri.replace(queryParameters: queryParameters).toString(),
       headers: bridgeHeaders.isEmpty ? null : bridgeHeaders,

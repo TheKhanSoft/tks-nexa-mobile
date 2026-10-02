@@ -49,6 +49,7 @@ void main() {
       'longitude',
       'horizontal_accuracy',
       'captured_at',
+      'is_mocked',
     });
     expect(json, isNot(contains('inside_polygon')));
     expect(json, isNot(contains('inside_geofence')));

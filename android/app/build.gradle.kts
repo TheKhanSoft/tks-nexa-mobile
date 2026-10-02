@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.tksnexa.attendance"
+    namespace = "com.tksnexa.thekhansoft"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -18,18 +18,26 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.tksnexa.attendance"
+        applicationId = "com.tksnexa.thekhansoft"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
+        versionCode = runCatching {
+            (System.currentTimeMillis() / 10000).toInt()
+        }.getOrDefault(flutter.versionCode)
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // Production signing is intentionally supplied outside source control.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }

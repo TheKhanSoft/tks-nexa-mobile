@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/features/account/domain/employee_profile.dart';
@@ -15,9 +17,9 @@ class EmployeeAccountApi {
     try {
       final response = await _dio.get<dynamic>('profile', options: _authorized);
       final root = _asMap(response.data);
-      final data = _asMap(root['data']);
-      final user = _asMap(data['user']);
-      final employee = _asMap(data['employee']);
+      final data = root['data'] is Map ? _asMap(root['data']) : root;
+      final user = _asOptionalMap(data['user']) ?? data;
+      final employee = _asOptionalMap(data['employee']) ?? data;
       final designation = _asOptionalMap(employee['designation_detail']);
       final reportingTo = _asOptionalMap(employee['reporting_to']);
       final permissions = _asOptionalMap(data['attendance_permissions']);
@@ -25,10 +27,13 @@ class EmployeeAccountApi {
       final security = _asOptionalMap(data['security']);
       final device = _asOptionalMap(security?['device']);
       final trust = _asOptionalMap(security?['trust_30_days']);
+
+      final employeeCode = _extractEmployeeId(employee, user, data);
+
       return EmployeeProfile(
         name: _string(employee['full_name'], fallback: user['name']),
         email: _string(user['email']),
-        employeeCode: _string(employee['employee_code']),
+        employeeCode: employeeCode,
         fatherName: _string(employee['father_name']),
         cnic: _string(employee['cnic']),
         designation: _string(employee['designation']),
@@ -36,7 +41,7 @@ class EmployeeAccountApi {
         campus: _string(employee['campus']),
         mobileNumber: _string(
           employee['mobile_number'],
-          fallback: employee['contact_number'],
+          fallback: _string(employee['contact_number']),
         ),
         gender: _string(employee['gender']),
         isActive: employee['is_active'] == true,
@@ -44,7 +49,7 @@ class EmployeeAccountApi {
         photoUrl: employee['photo_url'] is String
             ? employee['photo_url'] as String
             : null,
-        username: _string(user['username'], fallback: employee['username']),
+        username: _string(user['username'], fallback: _string(employee['username'])),
         dateOfBirth: _string(employee['date_of_birth']),
         address: _string(employee['address']),
         city: _string(employee['city']),
@@ -56,19 +61,21 @@ class EmployeeAccountApi {
           fallback: employee['office'],
         ),
         reportingTo: _string(reportingTo?['full_name']),
-        mustChangePassword: user['must_change_password'] == true,
+        mustChangePassword: user['must_change_password'] == true ||
+            data['must_change_password'] == true ||
+            employee['must_change_password'] == true,
         canMarkAttendance: permissions?['can_mark_attendance'] == true,
-        attendanceReasons: _stringList(permissions?['reasons']),
+        attendanceReasons: _asStringList(permissions?['reasons']),
         assignedShift: shift == null
             ? null
             : EmployeeShiftProfile(
-                name: _string(shift['name']),
+                name: _string(shift['name'], fallback: 'Standard Shift'),
                 code: _string(shift['code']),
-                startTime: _string(shift['start_time']),
-                endTime: _string(shift['end_time']),
+                startTime: _string(shift['start_time'], fallback: '08:00:00'),
+                endTime: _string(shift['end_time'], fallback: '17:00:00'),
                 gracePeriodMinutes: shift['grace_period_minutes'] is num
                     ? (shift['grace_period_minutes'] as num).toInt()
-                    : 0,
+                    : 15,
                 isOvernight: shift['is_overnight'] == true,
               ),
         security: EmployeeSecurityProfile(
@@ -76,24 +83,47 @@ class EmployeeAccountApi {
               security?['institutional_camera_available'] == true,
           locationName: _string(security?['location_name']),
           deviceId: _string(device?['device_id']),
-          deviceName: _string(device?['name']),
+          deviceName: _string(device?['device_name'], fallback: _string(device?['name'])),
           keyFingerprint: _string(device?['key_fingerprint']),
           deviceEnrolledAt: _dateTime(device?['enrolled_at']),
-          totalScans: _integer(trust?['total_scans']),
-          averageTrustScore: _double(trust?['average_score']),
-          highTrustCount: _integer(trust?['high_trust_count']),
-          corroboratedCount: _integer(trust?['corroborated_count']),
+          totalScans: trust?['total_scans'] is num
+              ? (trust!['total_scans'] as num).toInt()
+              : 0,
+          averageTrustScore: _double(trust?['average_trust_score']) ??
+              _double(trust?['average_score']),
+          highTrustCount: trust?['high_trust_count'] is num
+              ? (trust!['high_trust_count'] as num).toInt()
+              : 0,
+          corroboratedCount: trust?['corroborated_count'] is num
+              ? (trust!['corroborated_count'] as num).toInt()
+              : 0,
         ),
       );
     } on DioException catch (error) {
-      throw _failureFor(error, fallback: 'Unable to load your profile.');
+      throw switch (error.response?.statusCode) {
+        401 => const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'Your session expired. Please sign in again.',
+          diagnosticCode: 'ACCOUNT_UNAUTHORIZED',
+        ),
+        403 => const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'Access to this account details is restricted.',
+          diagnosticCode: 'ACCOUNT_FORBIDDEN',
+        ),
+        _ => const AppFailure(
+          code: FailureCode.unavailable,
+          message: 'Employee details are temporarily unavailable.',
+          diagnosticCode: 'ACCOUNT_UNAVAILABLE',
+        ),
+      };
     } on AppFailure {
       rethrow;
     } on Object {
       throw const AppFailure(
         code: FailureCode.invalidResponse,
-        message: 'The profile response was incomplete.',
-        diagnosticCode: 'PROFILE_RESPONSE_INVALID',
+        message: 'The account service returned invalid details.',
+        diagnosticCode: 'ACCOUNT_RESPONSE_INVALID',
       );
     }
   }
@@ -105,76 +135,169 @@ class EmployeeAccountApi {
     try {
       await _dio.post<dynamic>(
         'auth/change-password',
-        options: _authorized,
         data: {
           'current_password': currentPassword,
           'password': newPassword,
           'password_confirmation': newPassword,
         },
+        options: _authorized,
       );
     } on DioException catch (error) {
-      throw _failureFor(error, fallback: 'Unable to change your password.');
+      throw switch (error.response?.statusCode) {
+        401 => const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'Your current password is incorrect.',
+          diagnosticCode: 'PASSWORD_CHANGE_REJECTED',
+        ),
+        422 => const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'Check your password details and try again.',
+          diagnosticCode: 'PASSWORD_CHANGE_VALIDATION_FAILED',
+        ),
+        _ => const AppFailure(
+          code: FailureCode.unavailable,
+          message: 'Password change is temporarily unavailable.',
+          diagnosticCode: 'PASSWORD_CHANGE_UNAVAILABLE',
+        ),
+      };
+    } on AppFailure {
+      rethrow;
+    } on Object {
+      throw const AppFailure(
+        code: FailureCode.invalidResponse,
+        message: 'The password change service returned an invalid response.',
+        diagnosticCode: 'PASSWORD_CHANGE_RESPONSE_INVALID',
+      );
+    }
+  }
+
+  Future<String> uploadProfilePhoto({
+    Uint8List? photoBytes,
+    String? photoBase64,
+    String fileName = 'face_photo.jpg',
+  }) async {
+    try {
+      dynamic payload;
+      if (photoBytes != null) {
+        payload = FormData.fromMap({
+          'photo': MultipartFile.fromBytes(photoBytes, filename: fileName),
+        });
+      } else if (photoBase64 != null && photoBase64.isNotEmpty) {
+        payload = {'photo_base64': photoBase64};
+      } else {
+        throw const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'No photo provided for upload.',
+          diagnosticCode: 'NO_PHOTO_PROVIDED',
+        );
+      }
+
+      final response = await _dio.post<dynamic>(
+        'profile/photo',
+        data: payload,
+        options: _authorized,
+      );
+      final root = _asMap(response.data);
+      final resData = root['data'] is Map ? _asMap(root['data']) : root;
+      return _string(resData['photo_url']);
+    } on DioException catch (error) {
+      throw switch (error.response?.statusCode) {
+        401 => const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'Your session expired. Please sign in again.',
+          diagnosticCode: 'PHOTO_UPLOAD_UNAUTHORIZED',
+        ),
+        422 => const AppFailure(
+          code: FailureCode.invalidInput,
+          message: 'The photo file is invalid. Please take a clear face photo.',
+          diagnosticCode: 'PHOTO_UPLOAD_INVALID',
+        ),
+        _ => const AppFailure(
+          code: FailureCode.unavailable,
+          message: 'Failed to upload profile photo. Please try again.',
+          diagnosticCode: 'PHOTO_UPLOAD_UNAVAILABLE',
+        ),
+      };
+    } on AppFailure {
+      rethrow;
+    } on Object {
+      throw const AppFailure(
+        code: FailureCode.invalidResponse,
+        message: 'The photo upload service returned an invalid response.',
+        diagnosticCode: 'PHOTO_UPLOAD_RESPONSE_INVALID',
+      );
     }
   }
 
   Future<void> logout() async {
-    await _dio.post<dynamic>('auth/logout', options: _authorized);
+    try {
+      await _dio.post<dynamic>('auth/logout', options: _authorized);
+    } on Object {
+      // Local logout must proceed even if the network fails.
+    }
   }
 
-  static AppFailure _failureFor(
-    DioException error, {
-    required String fallback,
-  }) {
-    final status = error.response?.statusCode;
-    final response = error.response?.data;
-    String? serverMessage;
-    if (response is Map && response['message'] is String) {
-      serverMessage = response['message'] as String;
+  static String _extractEmployeeId(
+    Map<String, dynamic> employee,
+    Map<String, dynamic> user,
+    Map<String, dynamic> data,
+  ) {
+    for (final map in [employee, data, user]) {
+      final code = map['employee_code'] ??
+          map['code'] ??
+          map['employee_id'] ??
+          map['emp_code'] ??
+          map['emp_id'];
+      if (code != null && code.toString().trim().isNotEmpty) {
+        return code.toString().trim();
+      }
     }
-    return AppFailure(
-      code: status == 401
-          ? FailureCode.unauthorized
-          : status == 422
-          ? FailureCode.invalidInput
-          : FailureCode.unavailable,
-      message: serverMessage ?? fallback,
-      diagnosticCode: status == 401
-          ? 'SESSION_EXPIRED'
-          : status == 422
-          ? 'ACCOUNT_VALIDATION_FAILED'
-          : 'ACCOUNT_UNAVAILABLE',
-    );
+    return '';
   }
 
   static Map<String, dynamic> _asMap(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
-    throw const FormatException();
+    throw const AppFailure(
+      code: FailureCode.invalidResponse,
+      message: 'The account service returned an invalid format.',
+      diagnosticCode: 'ACCOUNT_FORMAT_INVALID',
+    );
   }
 
   static Map<String, dynamic>? _asOptionalMap(Object? value) {
     if (value == null) return null;
-    return _asMap(value);
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
   }
 
-  static List<String> _stringList(Object? value) {
-    if (value is! List) return const [];
-    return value.whereType<String>().map((item) => item.trim()).toList();
+  static String _string(Object? value, {String fallback = ''}) {
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    if (value is num) return value.toString();
+    return fallback;
   }
 
-  static String _string(Object? value, {Object? fallback}) {
-    final selected = value is String && value.trim().isNotEmpty
-        ? value
-        : fallback;
-    return selected is String ? selected.trim() : '';
+  static List<String> _asStringList(Object? value) {
+    if (value is List) {
+      return value
+          .map((item) => item?.toString().trim() ?? '')
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+    }
+    return const [];
   }
-
-  static int _integer(Object? value) => value is num ? value.toInt() : 0;
-
-  static double? _double(Object? value) =>
-      value is num ? value.toDouble() : null;
 
   static DateTime? _dateTime(Object? value) {
-    return value is String ? DateTime.tryParse(value)?.toLocal() : null;
+    if (value is String && value.trim().isNotEmpty) {
+      return DateTime.tryParse(value.trim());
+    }
+    return null;
+  }
+
+  static double? _double(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 }

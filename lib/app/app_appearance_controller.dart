@@ -24,7 +24,7 @@ class AppAppearanceController extends AsyncNotifier<AppAppearance> {
       colorTheme: _enumByName(
         AppColorTheme.values,
         values[0],
-        AppColorTheme.royal,
+        AppColorTheme.sunset,
       ),
       backgroundStyle: _enumByName(
         AppBackgroundStyle.values,

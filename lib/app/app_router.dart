@@ -5,12 +5,14 @@ import 'package:tks_nexa_attendance/features/auth/presentation/login_screen.dart
 import 'package:tks_nexa_attendance/features/attendance/domain/camera_corroboration.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/attendance_preparation_screen.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/camera_verification_screen.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/mobile_attendance_log_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/domain/organization.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/organization_confirmation_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/organization_qr_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/organization_selection_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/phase_one_home_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/startup_screen.dart';
+import 'package:tks_nexa_attendance/features/requests/presentation/requests_screen.dart';
 
 abstract final class AppRoutes {
   static const startup = '/';
@@ -26,6 +28,8 @@ abstract final class AppRoutes {
   static const securityDevices = '/account/security-devices';
   static const appSettings = '/account/settings';
   static const changePassword = '/account/change-password';
+  static const requests = '/requests';
+  static const mobileAttendanceLog = '/attendance/mobile-log';
 }
 
 final appRouterProvider = Provider<GoRouter>(
@@ -63,6 +67,10 @@ final appRouterProvider = Provider<GoRouter>(
         builder: (context, state) => const PhaseOneHomeScreen(),
       ),
       GoRoute(
+        path: AppRoutes.requests,
+        builder: (context, state) => const RequestsScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.attendancePreparation,
         builder: (context, state) => const AttendancePreparationScreen(),
       ),
@@ -95,6 +103,10 @@ final appRouterProvider = Provider<GoRouter>(
           }
           return CameraVerificationScreen(initialResult: result);
         },
+      ),
+      GoRoute(
+        path: AppRoutes.mobileAttendanceLog,
+        builder: (context, state) => const MobileAttendanceLogScreen(),
       ),
     ],
   ),

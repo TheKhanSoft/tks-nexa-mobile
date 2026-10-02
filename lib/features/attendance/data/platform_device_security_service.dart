@@ -6,7 +6,7 @@ class PlatformDeviceSecurityService implements DeviceSecurityService {
   const PlatformDeviceSecurityService();
 
   static const _channel = MethodChannel(
-    'com.tksnexa.attendance/device_security',
+    'com.tksnexa.thekhansoft/device_security',
   );
 
   @override

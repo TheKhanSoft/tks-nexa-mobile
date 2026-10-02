@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tks_nexa_attendance/app/app_appearance_controller.dart';
@@ -23,15 +24,13 @@ class PersonalInformationScreen extends ConsumerWidget {
     final brand = theme.extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
     return Scaffold(
       appBar: AppBar(
+        systemOverlayStyle: SystemUiOverlayStyle.light,
         backgroundColor: brand.heroStart,
         foregroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        flexibleSpace: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: brand.heroGradient),
-          ),
+        title: const Text(
+          'Personal Information',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        title: const Text('Personal information'),
         actions: [
           IconButton(
             tooltip: 'Refresh profile',
@@ -298,23 +297,25 @@ class _PersonalProfileHero extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    alignment: WrapAlignment.start,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (profile.employeeCode.isNotEmpty)
-                        _HeaderBadge(
-                          icon: Icons.badge_outlined,
-                          label: profile.employeeCode,
-                        ),
-                      if (profile.username.isNotEmpty)
-                        _HeaderBadge(
-                          icon: Icons.alternate_email_rounded,
-                          label: profile.username,
-                        ),
-                    ],
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        if (profile.employeeCode.isNotEmpty) ...[
+                          _HeaderBadge(
+                            icon: Icons.badge_outlined,
+                            label: profile.employeeCode,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (profile.username.isNotEmpty)
+                          _HeaderBadge(
+                            icon: Icons.alternate_email_rounded,
+                            label: profile.username,
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               );
@@ -347,31 +348,32 @@ class NotificationPreferencesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return _PreferenceScreen(
+    return const _PreferenceScreen(
       title: 'Notifications',
       subtitle: 'Choose the updates that matter to you.',
-      storagePrefix: 'preference:notification:',
-      options: const [
-        _PreferenceOption(
-          keyName: 'attendance_reminders',
-          icon: Icons.alarm_rounded,
-          title: 'Attendance reminders',
-          description: 'Reminders before your shift and missing check-outs.',
-          defaultValue: true,
+      children: [
+        SwitchListTile(
+          value: true,
+          onChanged: null,
+          secondary: Icon(Icons.alarm_rounded),
+          title: Text('Attendance reminders'),
+          subtitle: Text('Reminders before your shift and missing check-outs.'),
         ),
-        _PreferenceOption(
-          keyName: 'schedule_changes',
-          icon: Icons.event_repeat_rounded,
-          title: 'Schedule changes',
-          description: 'Changes to shifts, workdays, or holidays.',
-          defaultValue: true,
+        Divider(height: 1, indent: 56),
+        SwitchListTile(
+          value: true,
+          onChanged: null,
+          secondary: Icon(Icons.event_repeat_rounded),
+          title: Text('Schedule changes'),
+          subtitle: Text('Changes to shifts, workdays, or holidays.'),
         ),
-        _PreferenceOption(
-          keyName: 'security_alerts',
-          icon: Icons.gpp_good_outlined,
-          title: 'Security alerts',
-          description: 'New sign-ins and important account activity.',
-          defaultValue: true,
+        Divider(height: 1, indent: 56),
+        SwitchListTile(
+          value: true,
+          onChanged: null,
+          secondary: Icon(Icons.gpp_good_outlined),
+          title: Text('Security alerts'),
+          subtitle: Text('New sign-ins and important account activity.'),
         ),
       ],
     );
@@ -385,10 +387,12 @@ class AppSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final appearance =
         ref.watch(appAppearanceProvider).value ?? const AppAppearance();
+    final preferences =
+        ref.watch(appPreferencesProvider).value ?? const AppPreferences();
+
     return _PreferenceScreen(
       title: 'App settings',
       subtitle: 'Personalize your attendance experience on this device.',
-      storagePrefix: 'preference:app:',
       header: _AppearancePanel(
         appearance: appearance,
         onBrightnessSelected: ref
@@ -399,27 +403,41 @@ class AppSettingsScreen extends ConsumerWidget {
             .read(appAppearanceProvider.notifier)
             .setBackgroundStyle,
       ),
-      options: const [
-        _PreferenceOption(
-          keyName: '24_hour_time',
-          icon: Icons.schedule_rounded,
-          title: 'Use 24-hour time',
-          description: 'Display shift and attendance times in 24-hour format.',
-          defaultValue: false,
+      children: [
+        SwitchListTile(
+          value: preferences.use24HourTime,
+          onChanged: (value) => ref
+              .read(appPreferencesProvider.notifier)
+              .setUse24HourTime(value),
+          secondary: const Icon(Icons.schedule_rounded),
+          title: const Text('Use 24-hour time'),
+          subtitle: const Text(
+            'Display shift and attendance times in 24-hour format.',
+          ),
         ),
-        _PreferenceOption(
-          keyName: 'data_saver',
-          icon: Icons.data_saver_on_rounded,
-          title: 'Reduce mobile data usage',
-          description: 'Load fewer non-essential images on mobile networks.',
-          defaultValue: false,
+        const Divider(height: 1, indent: 56),
+        SwitchListTile(
+          value: preferences.dataSaver,
+          onChanged: (value) => ref
+              .read(appPreferencesProvider.notifier)
+              .setDataSaver(value),
+          secondary: const Icon(Icons.data_saver_on_rounded),
+          title: const Text('Reduce mobile data usage'),
+          subtitle: const Text(
+            'Load fewer non-essential images on mobile networks.',
+          ),
         ),
-        _PreferenceOption(
-          keyName: 'remember_tab',
-          icon: Icons.restore_page_outlined,
-          title: 'Remember last opened tab',
-          description: 'Return to your most recently used section.',
-          defaultValue: true,
+        const Divider(height: 1, indent: 56),
+        SwitchListTile(
+          value: preferences.rememberTab,
+          onChanged: (value) => ref
+              .read(appPreferencesProvider.notifier)
+              .setRememberTab(value),
+          secondary: const Icon(Icons.restore_page_outlined),
+          title: const Text('Remember last opened tab'),
+          subtitle: const Text(
+            'Return to your most recently used section.',
+          ),
         ),
       ],
     );
@@ -668,14 +686,39 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    context.pop();
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.home);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(changePasswordControllerProvider);
+    final session = ref.watch(currentAuthSessionProvider);
+    final profile = ref.watch(employeeProfileProvider).value;
+    final isTempPassword = (session?.mustChangePassword == true) ||
+        (profile?.mustChangePassword == true) ||
+        (session?.actionRequired == 'change_password');
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Change password')),
+      appBar: AppBar(
+        title: const Text('Change password'),
+        actions: [
+          if (isTempPassword)
+            IconButton(
+              tooltip: 'Sign out',
+              icon: const Icon(Icons.logout_rounded),
+              onPressed: () async {
+                await ref.read(loginControllerProvider.notifier).logout();
+                if (context.mounted) {
+                  context.go(AppRoutes.organizationSelection);
+                }
+              },
+            ),
+        ],
+      ),
       body: _PageWidth(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
@@ -684,6 +727,55 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (isTempPassword) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.error.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Theme.of(context).colorScheme.error,
+                          size: 26,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Temporary Password Detected',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                session?.actionMessage ??
+                                    session?.passwordChangeMessage ??
+                                    'Your account is using a temporary password. You must set a new permanent password before marking attendance.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Theme.of(context).colorScheme.onErrorContainer,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 const _PageIntro(
                   icon: Icons.password_rounded,
                   title: 'Create a strong password',
@@ -899,23 +991,94 @@ class _AppearancePanel extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final style in AppBackgroundStyle.values)
-                  ChoiceChip(
-                    key: Key('background_${style.name}'),
+                for (final style in appearance.colorTheme.availableBackgrounds)
+                  _BackgroundStylePill(
+                    style: style,
                     selected: appearance.backgroundStyle == style,
-                    onSelected: (_) => onBackgroundSelected(style),
-                    avatar: Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: style.colorFor(theme.brightness),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: brand.divider),
-                      ),
-                    ),
-                    label: Text(style.label),
+                    onTap: () => onBackgroundSelected(style),
                   ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BackgroundStylePill extends StatelessWidget {
+  const _BackgroundStylePill({
+    required this.style,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppBackgroundStyle style;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pillBg = style.colorFor(Theme.of(context).brightness);
+    final textColor = pillBg.computeLuminance() > 0.42
+        ? const Color(0xFF0F172A)
+        : Colors.white;
+    final isDarkOption = pillBg.computeLuminance() <= 0.42;
+
+    return InkWell(
+      key: Key('background_${style.name}'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: pillBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? Theme.of(context).colorScheme.primary
+                : (isDarkOption ? Colors.white30 : Colors.black12),
+            width: selected ? 2.5 : 1.0,
+          ),
+          boxShadow: [
+            if (selected)
+              BoxShadow(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            else
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected) ...[
+              Icon(
+                Icons.check_circle_rounded,
+                size: 16,
+                color: isDarkOption
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              style.label,
+              style: TextStyle(
+                color: textColor,
+                fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                fontSize: 13,
+              ),
             ),
           ],
         ),
@@ -1017,107 +1180,45 @@ class _ThemeChoice extends StatelessWidget {
   }
 }
 
-class _PreferenceScreen extends ConsumerStatefulWidget {
+class _PreferenceScreen extends StatelessWidget {
   const _PreferenceScreen({
     required this.title,
     required this.subtitle,
-    required this.storagePrefix,
-    required this.options,
+    required this.children,
     this.header,
   });
 
   final String title;
   final String subtitle;
-  final String storagePrefix;
-  final List<_PreferenceOption> options;
+  final List<Widget> children;
   final Widget? header;
 
   @override
-  ConsumerState<_PreferenceScreen> createState() => _PreferenceScreenState();
-}
-
-class _PreferenceScreenState extends ConsumerState<_PreferenceScreen> {
-  final Map<String, bool> _values = {};
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final storage = ref.read(secureStorageServiceProvider);
-    for (final option in widget.options) {
-      final saved = await storage.read(
-        '${widget.storagePrefix}${option.keyName}',
-      );
-      _values[option.keyName] = saved == null
-          ? option.defaultValue
-          : saved == 'true';
-    }
-    if (mounted) setState(() => _loading = false);
-  }
-
-  Future<void> _change(_PreferenceOption option, bool value) async {
-    setState(() => _values[option.keyName] = value);
-    await ref
-        .read(secureStorageServiceProvider)
-        .write('${widget.storagePrefix}${option.keyName}', value.toString());
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final muted =
-        Theme.of(context).extension<AppBrandTheme>()?.mutedText ??
-        AppPalette.muted;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _PageWidth(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
-                children: [
-                  _PageIntro(
-                    icon: Icons.tune_rounded,
-                    title: widget.title,
-                    subtitle: widget.subtitle,
-                  ),
-                  if (widget.header != null) ...[
-                    const SizedBox(height: 18),
-                    widget.header!,
-                  ],
-                  const SizedBox(height: 22),
-                  Card(
-                    child: Column(
-                      children: [
-                        for (
-                          var index = 0;
-                          index < widget.options.length;
-                          index++
-                        ) ...[
-                          _PreferenceTile(
-                            option: widget.options[index],
-                            value: _values[widget.options[index].keyName]!,
-                            onChanged: (value) =>
-                                _change(widget.options[index], value),
-                          ),
-                          if (index < widget.options.length - 1)
-                            const Divider(height: 1, indent: 70),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'These preferences are stored securely on this device.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: muted),
-                  ),
-                ],
+      appBar: AppBar(title: Text(title)),
+      body: _PageWidth(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+          children: [
+            _PageIntro(
+              icon: Icons.tune_rounded,
+              title: title,
+              subtitle: subtitle,
+            ),
+            if (header != null) ...[
+              const SizedBox(height: 18),
+              header!,
+            ],
+            const SizedBox(height: 22),
+            Card(
+              child: Column(
+                children: children,
               ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1389,56 +1490,6 @@ class _HeaderBadge extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _PreferenceOption {
-  const _PreferenceOption({
-    required this.keyName,
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.defaultValue,
-  });
-  final String keyName;
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool defaultValue;
-}
-
-class _PreferenceTile extends StatelessWidget {
-  const _PreferenceTile({
-    required this.option,
-    required this.value,
-    required this.onChanged,
-  });
-  final _PreferenceOption option;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final brand =
-        Theme.of(context).extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
-    return SwitchListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-      secondary: CircleAvatar(
-        backgroundColor: colorScheme.secondary.withValues(alpha: .14),
-        child: Icon(option.icon, color: colorScheme.secondary),
-      ),
-      title: Text(
-        option.title,
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      subtitle: Text(
-        option.description,
-        style: TextStyle(color: brand.mutedText),
-      ),
-      value: value,
-      onChanged: onChanged,
     );
   }
 }

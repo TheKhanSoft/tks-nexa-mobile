@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 abstract final class AppPalette {
   static const midnight = Color(0xFF111C4E);
@@ -16,15 +17,60 @@ abstract final class AppPalette {
 }
 
 enum AppColorTheme {
+  sunset('Sunset amber'),
   royal('Royal indigo'),
   ocean('Ocean teal'),
   emerald('Emerald'),
   plum('Plum dusk'),
-  sunset('Sunset amber'),
   graphite('Graphite blue');
 
   const AppColorTheme(this.label);
   final String label;
+}
+
+extension AppThemeBackgrounds on AppColorTheme {
+  List<AppBackgroundStyle> get availableBackgrounds => switch (this) {
+    AppColorTheme.sunset => const [
+      AppBackgroundStyle.cloud,
+      AppBackgroundStyle.rose,
+      AppBackgroundStyle.sand,
+      AppBackgroundStyle.midnight,
+      AppBackgroundStyle.pitch,
+    ],
+    AppColorTheme.royal => const [
+      AppBackgroundStyle.cloud,
+      AppBackgroundStyle.snow,
+      AppBackgroundStyle.twilight,
+      AppBackgroundStyle.deepSlate,
+      AppBackgroundStyle.midnight,
+      AppBackgroundStyle.pitch,
+    ],
+    AppColorTheme.ocean => const [
+      AppBackgroundStyle.cloud,
+      AppBackgroundStyle.mint,
+      AppBackgroundStyle.midnight,
+      AppBackgroundStyle.pitch,
+    ],
+    AppColorTheme.emerald => const [
+      AppBackgroundStyle.mint,
+      AppBackgroundStyle.snow,
+      AppBackgroundStyle.deepSlate,
+      AppBackgroundStyle.pitch,
+    ],
+    AppColorTheme.plum => const [
+      AppBackgroundStyle.twilight,
+      AppBackgroundStyle.rose,
+      AppBackgroundStyle.snow,
+      AppBackgroundStyle.midnight,
+      AppBackgroundStyle.pitch,
+    ],
+    AppColorTheme.graphite => const [
+      AppBackgroundStyle.snow,
+      AppBackgroundStyle.cloud,
+      AppBackgroundStyle.deepSlate,
+      AppBackgroundStyle.pitch,
+    ],
+  };
 }
 
 enum AppBrightnessPreference {
@@ -45,10 +91,12 @@ enum AppBrightnessPreference {
 enum AppBackgroundStyle {
   cloud('Cloud', Color(0xFFE8EDFA), Color(0xFF111827)),
   snow('Snow', Color(0xFFF1F4FA), Color(0xFF0B1020)),
+  midnight('Midnight Dark', Color(0xFF13192B), Color(0xFF0B0F19)),
+  pitch('OLED Black', Color(0xFF0D111A), Color(0xFF000000)),
+  deepSlate('Deep Slate', Color(0xFF1E293B), Color(0xFF0F172A)),
   mint('Mint mist', Color(0xFFE4F3EE), Color(0xFF092923)),
   sand('Warm sand', Color(0xFFF8EDDF), Color(0xFF2A2119)),
   twilight('Twilight', Color(0xFFE1DFF5), Color(0xFF18152E)),
-  slate('Slate', Color(0xFFDCE3EC), Color(0xFF101820)),
   rose('Rose smoke', Color(0xFFF2E1EA), Color(0xFF2A1722));
 
   const AppBackgroundStyle(this.label, this.lightColor, this.darkColor);
@@ -66,7 +114,7 @@ enum AppBackgroundStyle {
 
 class AppAppearance {
   const AppAppearance({
-    this.colorTheme = AppColorTheme.royal,
+    this.colorTheme = AppColorTheme.sunset,
     this.backgroundStyle = AppBackgroundStyle.cloud,
     this.brightnessPreference = AppBrightnessPreference.system,
   });
@@ -106,10 +154,10 @@ class AppBrandTheme extends ThemeExtension<AppBrandTheme> {
   final Color divider;
 
   static const fallback = AppBrandTheme(
-    heroStart: AppPalette.midnight,
-    heroMiddle: AppPalette.indigo,
-    heroEnd: AppPalette.cobalt,
-    softAccent: AppPalette.softIndigo,
+    heroStart: Color(0xFF501A2A),
+    heroMiddle: Color(0xFFCF3F51),
+    heroEnd: Color(0xFFF59E0B),
+    softAccent: Color(0xFFFDE8E8),
     mutedText: AppPalette.muted,
     divider: AppPalette.divider,
   );
@@ -164,43 +212,54 @@ class AppTheme {
   }) {
     final preset = _presetFor(appearance.colorTheme);
     final isDark = brightness == Brightness.dark;
-    final pageBackground = appearance.backgroundStyle.colorFor(brightness);
-    final surfaceBase = isDark ? const Color(0xFF151B29) : Colors.white;
+
+    final rawBg = appearance.backgroundStyle.colorFor(brightness);
+    final isDarkBg = rawBg.computeLuminance() < 0.22 || isDark;
+
+    // Theme-specific distinct page background canvas
+    final pageBackground = appearance.backgroundStyle == AppBackgroundStyle.cloud
+        ? (isDarkBg ? preset.darkCanvas : preset.lightCanvas)
+        : (isDarkBg
+            ? Color.alphaBlend(preset.heroStart.withValues(alpha: .5), rawBg)
+            : Color.alphaBlend(preset.primary.withValues(alpha: .05), rawBg));
+
+    final surfaceBase = isDarkBg ? preset.cardSurfaceDark : preset.cardSurfaceLight;
     final surface = Color.alphaBlend(
-      preset.primary.withValues(alpha: isDark ? .12 : .055),
+      preset.primary.withValues(alpha: isDarkBg ? .08 : .03),
       surfaceBase,
     );
+
     final scheme = ColorScheme.fromSeed(
       seedColor: preset.primary,
-      brightness: brightness,
+      brightness: isDarkBg ? Brightness.dark : Brightness.light,
       primary: preset.primary,
       secondary: preset.secondary,
       tertiary: preset.tertiary,
       surface: surface,
     );
-    final mutedText = isDark ? const Color(0xFFACB7CD) : AppPalette.muted;
-    final divider = isDark ? const Color(0xFF354057) : AppPalette.divider;
+    final mutedText = isDarkBg ? const Color(0xFFACB7CD) : AppPalette.muted;
+    final divider = isDarkBg ? const Color(0xFF354057) : AppPalette.divider;
     final brand = AppBrandTheme(
       heroStart: preset.heroStart,
       heroMiddle: preset.heroMiddle,
       heroEnd: preset.heroEnd,
       softAccent: Color.alphaBlend(
-        preset.primary.withValues(alpha: isDark ? .22 : .11),
+        preset.primary.withValues(alpha: isDarkBg ? .22 : .11),
         surface,
       ),
       mutedText: mutedText,
       divider: divider,
     );
-    final baseTextTheme = isDark
+    final baseTextTheme = isDarkBg
         ? ThemeData.dark().textTheme
         : ThemeData.light().textTheme;
-    final textColor = isDark ? const Color(0xFFEAF0FC) : AppPalette.ink;
+    final textColor = isDarkBg ? const Color(0xFFEAF0FC) : AppPalette.ink;
 
     return ThemeData(
       useMaterial3: true,
-      brightness: brightness,
+      brightness: isDarkBg ? Brightness.dark : Brightness.light,
       colorScheme: scheme,
-      scaffoldBackgroundColor: Colors.transparent,
+      scaffoldBackgroundColor: pageBackground,
       canvasColor: pageBackground,
       extensions: [brand],
       textTheme: baseTextTheme.apply(
@@ -215,6 +274,9 @@ class AppTheme {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
+        systemOverlayStyle: isDarkBg
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
       ),
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
@@ -238,7 +300,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: BorderSide(
-            color: preset.primary.withValues(alpha: isDark ? .18 : .08),
+            color: preset.primary.withValues(alpha: isDarkBg ? .18 : .08),
           ),
         ),
       ),
@@ -277,13 +339,25 @@ class AppTheme {
         textColor: textColor,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: isDark ? const Color(0xFF283044) : preset.heroStart,
+        backgroundColor: isDarkBg ? const Color(0xFF283044) : preset.heroStart,
         contentTextStyle: const TextStyle(color: Colors.white),
       ),
     );
   }
 
   static _ThemePreset _presetFor(AppColorTheme theme) => switch (theme) {
+    AppColorTheme.sunset => const _ThemePreset(
+      primary: Color(0xFFD9383A),
+      secondary: Color(0xFFD97706),
+      tertiary: Color(0xFFDB2777),
+      heroStart: Color(0xFF3F121C),
+      heroMiddle: Color(0xFFB91C1C),
+      heroEnd: Color(0xFFD97706),
+      lightCanvas: Color(0xFFFAF0EE),
+      darkCanvas: Color(0xFF1E0A10),
+      cardSurfaceLight: Color(0xFFFFFFFF),
+      cardSurfaceDark: Color(0xFF2B1218),
+    ),
     AppColorTheme.royal => const _ThemePreset(
       primary: Color(0xFF5145CD),
       secondary: Color(0xFF06B6D4),
@@ -291,6 +365,10 @@ class AppTheme {
       heroStart: Color(0xFF111C4E),
       heroMiddle: Color(0xFF4338CA),
       heroEnd: Color(0xFF2563EB),
+      lightCanvas: Color(0xFFEEF2FF),
+      darkCanvas: Color(0xFF0C102B),
+      cardSurfaceLight: Color(0xFFFFFFFF),
+      cardSurfaceDark: Color(0xFF1A2142),
     ),
     AppColorTheme.ocean => const _ThemePreset(
       primary: Color(0xFF008A91),
@@ -299,6 +377,10 @@ class AppTheme {
       heroStart: Color(0xFF073B4C),
       heroMiddle: Color(0xFF007F86),
       heroEnd: Color(0xFF0EA5A4),
+      lightCanvas: Color(0xFFE6FFFA),
+      darkCanvas: Color(0xFF052026),
+      cardSurfaceLight: Color(0xFFFFFFFF),
+      cardSurfaceDark: Color(0xFF12333B),
     ),
     AppColorTheme.emerald => const _ThemePreset(
       primary: Color(0xFF078A65),
@@ -307,6 +389,10 @@ class AppTheme {
       heroStart: Color(0xFF063F36),
       heroMiddle: Color(0xFF047857),
       heroEnd: Color(0xFF10B981),
+      lightCanvas: Color(0xFFE6F4EA),
+      darkCanvas: Color(0xFF05221A),
+      cardSurfaceLight: Color(0xFFFFFFFF),
+      cardSurfaceDark: Color(0xFF0F3A2D),
     ),
     AppColorTheme.plum => const _ThemePreset(
       primary: Color(0xFF8B4BE8),
@@ -315,14 +401,10 @@ class AppTheme {
       heroStart: Color(0xFF351451),
       heroMiddle: Color(0xFF7C3AED),
       heroEnd: Color(0xFFC026D3),
-    ),
-    AppColorTheme.sunset => const _ThemePreset(
-      primary: Color(0xFFE25545),
-      secondary: Color(0xFFF59E0B),
-      tertiary: Color(0xFFEC4899),
-      heroStart: Color(0xFF501A2A),
-      heroMiddle: Color(0xFFCF3F51),
-      heroEnd: Color(0xFFF59E0B),
+      lightCanvas: Color(0xFFF8EEFE),
+      darkCanvas: Color(0xFF1C0828),
+      cardSurfaceLight: Color(0xFFFFFFFF),
+      cardSurfaceDark: Color(0xFF311642),
     ),
     AppColorTheme.graphite => const _ThemePreset(
       primary: Color(0xFF52677F),
@@ -331,6 +413,10 @@ class AppTheme {
       heroStart: Color(0xFF111827),
       heroMiddle: Color(0xFF334155),
       heroEnd: Color(0xFF64748B),
+      lightCanvas: Color(0xFFF0F4F8),
+      darkCanvas: Color(0xFF0B1220),
+      cardSurfaceLight: Color(0xFFFFFFFF),
+      cardSurfaceDark: Color(0xFF1E293B),
     ),
   };
 }
@@ -343,6 +429,10 @@ class _ThemePreset {
     required this.heroStart,
     required this.heroMiddle,
     required this.heroEnd,
+    required this.lightCanvas,
+    required this.darkCanvas,
+    required this.cardSurfaceLight,
+    required this.cardSurfaceDark,
   });
 
   final Color primary;
@@ -351,4 +441,8 @@ class _ThemePreset {
   final Color heroStart;
   final Color heroMiddle;
   final Color heroEnd;
+  final Color lightCanvas;
+  final Color darkCanvas;
+  final Color cardSurfaceLight;
+  final Color cardSurfaceDark;
 }

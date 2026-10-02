@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+
 import 'package:tks_nexa_attendance/app/app_theme.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/core/platform/temp_capture_cleanup.dart';
@@ -10,7 +11,14 @@ import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evid
 import 'package:tks_nexa_attendance/features/attendance/domain/face_observation_service.dart';
 
 class FaceCaptureScreen extends StatefulWidget {
-  const FaceCaptureScreen({super.key});
+  const FaceCaptureScreen({
+    super.key,
+    this.title = 'Face Verification',
+    this.instruction = 'Position face in frame',
+  });
+
+  final String title;
+  final String instruction;
 
   @override
   State<FaceCaptureScreen> createState() => _FaceCaptureScreenState();
@@ -25,14 +33,13 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
   bool _returnedCapture = false;
   late final FaceObservationService _faceObserver;
   late String _challenge;
-  int _livenessStage = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _faceObserver = createFaceObservationService();
-    _challenge = _newChallenge();
+    _challenge = 'passive_single_frame';
     _initializeCamera();
   }
 
@@ -66,7 +73,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
       if (!mounted) return;
       setState(
         () => _error =
-            'The camera could not be opened. Check browser or device permissions.',
+            'The camera could not be opened. Check device permissions.',
       );
     }
   }
@@ -83,6 +90,9 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
     }
   }
 
+  /// Single-frame passive liveness capture.
+  /// Captures 1 single picture, performs passive ML Kit liveness checks
+  /// (eyes open, face centered, 1 person in frame) without asking for poses.
   Future<void> _takePicture() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _capturing) {
@@ -94,15 +104,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
       final file = await controller.takePicture();
       temporaryPath = file.path;
       final observation = await _faceObserver.observe(file.path);
-      _validateObservation(observation);
-      if (_livenessStage < 2) {
-        if (!mounted) return;
-        setState(() {
-          _livenessStage += 1;
-          _error = null;
-        });
-        return;
-      }
+      _validatePassiveObservation(observation);
 
       final bytes = await file.readAsBytes();
       if (bytes.isEmpty || bytes.length > 8 * 1024 * 1024) {
@@ -143,46 +145,42 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
     }
   }
 
-  void _validateObservation(FaceObservation observation) {
-    if (_livenessStage == 1) {
-      final passed = switch (_challenge) {
-        'smile' => (observation.smilingProbability ?? 0) >= .65,
-        'turn_head' => observation.yaw.abs() >= 18,
-        _ => false,
-      };
-      if (!passed) {
-        throw AppFailure(
-          code: FailureCode.invalidInput,
-          message: _challenge == 'smile'
-              ? 'A clear smile was not detected. Smile and try again.'
-              : 'Turn your head farther to either side and try again.',
-          diagnosticCode: 'LIVENESS_CHALLENGE_INCOMPLETE',
-        );
-      }
-      return;
-    }
-
+  /// Passive liveness validation:
+  /// Verifies eyes open, face facing forward, and single face in frame.
+  /// Zero reading/posing required by the user!
+  void _validatePassiveObservation(FaceObservation observation) {
     final leftEye = observation.leftEyeOpenProbability;
     final rightEye = observation.rightEyeOpenProbability;
     final eyesOpen =
-        leftEye != null && rightEye != null && leftEye >= .5 && rightEye >= .5;
-    if (observation.yaw.abs() > 14 || !eyesOpen) {
+        leftEye == null ||
+        rightEye == null ||
+        (leftEye >= 0.35 && rightEye >= 0.35);
+
+    if (observation.yaw.abs() > 18 || !eyesOpen) {
       throw const AppFailure(
         code: FailureCode.invalidInput,
-        message: 'Look directly at the camera with both eyes open.',
-        diagnosticCode: 'FACE_ALIGNMENT_REQUIRED',
+        message:
+            'Face forward with both eyes open inside the frame.',
+        diagnosticCode: 'PASSIVE_LIVENESS_ALIGNMENT_REQUIRED',
       );
     }
   }
 
-  void _retake() {
+  Future<void> _retake() async {
     _discardCapture(_capture);
     setState(() {
       _capture = null;
       _error = null;
-      _livenessStage = 0;
-      _challenge = _newChallenge();
     });
+    try {
+      if (_controller != null && _controller!.value.isInitialized) {
+        await _controller!.resumePreview();
+      } else {
+        await _initializeCamera();
+      }
+    } catch (_) {
+      await _initializeCamera();
+    }
   }
 
   void _useCapture() {
@@ -206,29 +204,61 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
     final capture = _capture;
     final theme = Theme.of(context);
     final brand = theme.extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
+    final isVerified = capture != null;
+
     return Scaffold(
       backgroundColor: brand.heroStart,
       appBar: AppBar(
         backgroundColor: brand.heroStart,
         foregroundColor: Colors.white,
-        title: const Text(
-          'Face verification',
-          style: TextStyle(fontWeight: FontWeight.w800),
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
         child: Column(
           children: [
+            // Simple visual instruction header
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
-              child: Text(
-                capture == null
-                    ? _instruction
-                    : 'Live challenge passed. Review your final temporary capture.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, height: 1.4),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isVerified
+                          ? Icons.check_circle_rounded
+                          : Icons.face_rounded,
+                      color: isVerified
+                          ? const Color(0xFF10B981)
+                          : Colors.white,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isVerified
+                          ? 'Face Verified!'
+                          : widget.instruction,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+
+            // Camera Viewfinder & Frame Overlay
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -251,18 +281,32 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
                 ),
               ),
             ),
+
+            // Action Controls
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
               child: Column(
                 children: [
                   if (_error case final error?) ...[
-                    Text(
-                      error,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Color(0xFFFFB4BC)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        error,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFFFB4BC),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 12),
                   ],
+
                   if (capture == null)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -273,40 +317,36 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white,
                               side: const BorderSide(color: Colors.white38),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 12),
                             ),
                             icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('Try again'),
+                            label: const Text('Try Again'),
                           )
                         else
-                          SizedBox.square(
-                            dimension: 76,
+                          // Large prominent single-tap capture button
+                          SizedBox(
+                            width: 80,
+                            height: 80,
                             child: FilledButton(
                               key: const Key('capture_face'),
                               onPressed: _capturing ? null : _takePicture,
                               style: FilledButton.styleFrom(
                                 padding: EdgeInsets.zero,
-                                backgroundColor: Colors.white,
-                                foregroundColor: theme.colorScheme.primary,
-                                shape: const CircleBorder(),
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                                shape: const CircleBorder(
+                                  side: BorderSide(
+                                      color: Colors.white, width: 4),
+                                ),
+                                elevation: 8,
                               ),
                               child: _capturing
-                                  ? const CircularProgressIndicator()
-                                  : Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const Icon(
-                                          Icons.camera_alt_rounded,
-                                          size: 29,
-                                        ),
-                                        Text(
-                                          '${_livenessStage + 1}/3',
-                                          style: const TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ],
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 3)
+                                  : const Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 36,
                                     ),
                             ),
                           ),
@@ -321,6 +361,10 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white,
                               side: const BorderSide(color: Colors.white38),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
                             ),
                             icon: const Icon(Icons.refresh_rounded),
                             label: const Text('Retake'),
@@ -331,18 +375,19 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
                           child: FilledButton.icon(
                             key: const Key('use_face_capture'),
                             onPressed: _useCapture,
-                            icon: const Icon(Icons.check_rounded),
-                            label: const Text('Use photo'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            icon: const Icon(Icons.check_circle_rounded),
+                            label: const Text('Confirm Photo'),
                           ),
                         ),
                       ],
                     ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Three fresh observations are checked on this device. Images are cleared if you cancel.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
                 ],
               ),
             ),
@@ -351,17 +396,6 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
       ),
     );
   }
-
-  String get _instruction => switch (_livenessStage) {
-    0 => 'Step 1 of 3 · Look directly at the camera with both eyes open.',
-    1 when _challenge == 'smile' =>
-      'Step 2 of 3 · Smile naturally for the live challenge.',
-    1 => 'Step 2 of 3 · Turn your head clearly to either side.',
-    _ => 'Step 3 of 3 · Look directly at the camera again.',
-  };
-
-  String _newChallenge() =>
-      DateTime.now().microsecond.isEven ? 'smile' : 'turn_head';
 
   Widget _cameraPreview() {
     final controller = _controller;
@@ -396,14 +430,24 @@ class _FaceGuideOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: Center(
-        child: Container(
-          width: 220,
-          height: 290,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(110),
-            border: Border.all(color: Colors.white, width: 3),
-            boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 12)],
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 230,
+              height: 300,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(120),
+                border: Border.all(color: const Color(0xFF10B981), width: 3.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x40000000),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -413,7 +457,7 @@ class _FaceGuideOverlay extends StatelessWidget {
 String _cameraMessage(CameraException error) {
   return switch (error.code) {
     'CameraAccessDenied' || 'CameraAccessDeniedWithoutPrompt' =>
-      'Camera permission is required. Enable it in browser or device settings.',
+      'Camera permission is required.',
     'CameraAccessRestricted' => 'Camera access is restricted on this device.',
     'capture_size_invalid' => error.description ?? 'The capture is invalid.',
     _ => error.description ?? 'The camera is currently unavailable.',

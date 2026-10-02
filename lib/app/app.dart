@@ -14,7 +14,7 @@ class TksNexaApp extends ConsumerWidget {
     final appearance =
         ref.watch(appAppearanceProvider).value ?? const AppAppearance();
     return MaterialApp.router(
-      title: 'TKS Nexa Attendance',
+      title: 'TKS Nexa',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.forAppearance(appearance, brightness: Brightness.light),
       darkTheme: AppTheme.forAppearance(

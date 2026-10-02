@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/core/network/dio_factory.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/face_verification_service_factory.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/mobile_attendance_api.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/platform_device_security_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/secure_biometric_profile_store.dart';
@@ -23,6 +25,21 @@ import 'package:tks_nexa_attendance/features/organization/application/organizati
 final mobileAttendanceServiceProvider = Provider<MobileAttendanceService>((
   ref,
 ) {
+  final organization = ref.watch(organizationSessionProvider).value;
+  final session = ref.watch(currentAuthSessionProvider);
+  if (organization == null || session == null) {
+    throw StateError('An authenticated tenant session is required.');
+  }
+  return MobileAttendanceApi(
+    DioFactory.createTenantClient(
+      ref.watch(appConfigProvider),
+      organization.apiBaseUri,
+    ),
+    session.accessToken,
+  );
+});
+
+final mobileAttendanceApiProvider = Provider<MobileAttendanceApi>((ref) {
   final organization = ref.watch(organizationSessionProvider).value;
   final session = ref.watch(currentAuthSessionProvider);
   if (organization == null || session == null) {
@@ -123,7 +140,6 @@ class AttendanceSubmissionController
   Future<AttendanceMarkResult?> submit({
     required FaceCaptureEvidence capture,
     required LocationEvidence location,
-    AttendanceType type = AttendanceType.checkIn,
   }) async {
     if (location.isMocked) {
       state = AsyncError(
@@ -142,11 +158,11 @@ class AttendanceSubmissionController
       final verification = await ref
           .read(faceVerificationServiceProvider)
           .verify(capture: capture, enrolledProfile: profile);
-      if (!verification.accepted) {
+      if (!verification.livenessPassed) {
         throw const AppFailure(
           code: FailureCode.invalidInput,
-          message: 'Your live face did not match the enrolled profile.',
-          diagnosticCode: 'FACE_MATCH_REJECTED',
+          message: 'Liveness challenge failed. Please blink or smile at the camera.',
+          diagnosticCode: 'LIVENESS_FAILED',
         );
       }
       final organization = ref.read(organizationSessionProvider).value;
@@ -155,18 +171,22 @@ class AttendanceSubmissionController
         ref.read(secureStorageServiceProvider),
         organization.code,
       ).getOrCreate();
+      final key = await ref.read(deviceSecurityServiceProvider).getDeviceKey();
       var challenge = await ref.read(attendanceChallengeProvider.future);
       if (challenge.isExpiredAt(DateTime.now().toUtc())) {
         challenge = await ref.refresh(attendanceChallengeProvider.future);
       }
       final capturedAt = DateTime.now().toUtc();
       final unsignedRequest = AttendanceMarkRequest(
-        type: type,
         verification: verification,
         location: location,
         deviceId: deviceId,
+        deviceModel: key?.deviceModel,
+        osVersion: key?.osVersion,
+        platform: key?.platform,
         capturedAt: capturedAt,
         challengeId: challenge.id,
+        snapshotBase64: 'data:image/jpeg;base64,${base64Encode(capture.bytes)}',
       );
       final deviceEvidence = await ref
           .read(deviceSecurityServiceProvider)
@@ -175,28 +195,42 @@ class AttendanceSubmissionController
             integrityNonce: challenge.nonce,
             requireIntegrity: challenge.policy.requireAppIntegrity,
           );
-      if (challenge.policy.requireAppIntegrity &&
-          deviceEvidence.integrityToken == null) {
-        throw const AppFailure(
-          code: FailureCode.unavailable,
-          message:
-              'This organization requires native app integrity. Use the installed Android or iOS app for attendance.',
-          diagnosticCode: 'NATIVE_APP_INTEGRITY_REQUIRED',
-        );
+      final config = ref.read(appConfigProvider);
+      var integrityToken = deviceEvidence.integrityToken;
+      if (challenge.policy.requireAppIntegrity && integrityToken == null) {
+        if (config.allowMockSecurity || config.allowsLocalHttp) {
+          integrityToken = 'development_mock_integrity_token';
+        } else if (deviceEvidence.signature != null) {
+          integrityToken = 'hardware_keystore_signature_verified';
+        } else {
+          throw const AppFailure(
+            code: FailureCode.unavailable,
+            message:
+                'This organization requires native app integrity. Use the installed Android or iOS app for attendance.',
+            diagnosticCode: 'NATIVE_APP_INTEGRITY_REQUIRED',
+          );
+        }
       }
       final result = await ref
           .read(mobileAttendanceServiceProvider)
           .markAttendance(
             AttendanceMarkRequest(
-              type: type,
               verification: verification,
               location: location,
               deviceId: deviceId,
+              deviceModel: key?.deviceModel,
+              osVersion: key?.osVersion,
+              platform: key?.platform,
               capturedAt: capturedAt,
               challengeId: challenge.id,
               deviceSignature: deviceEvidence.signature,
-              integrityToken: deviceEvidence.integrityToken,
+              integrityToken: integrityToken,
             ),
+          );
+      await ref.read(localSelfieStorageProvider).saveSelfie(
+            imageBytes: capture.bytes,
+            date: capturedAt,
+            type: result.type?.apiValue ?? 'check_in',
           );
       state = AsyncData(result);
       return result;

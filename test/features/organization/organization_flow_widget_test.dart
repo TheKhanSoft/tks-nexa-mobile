@@ -5,6 +5,7 @@ import 'package:tks_nexa_attendance/app/app.dart';
 import 'package:tks_nexa_attendance/core/config/app_config.dart';
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 import 'package:tks_nexa_attendance/features/organization/domain/organization.dart';
+import 'package:tks_nexa_attendance/features/organization/presentation/organization_selection_screen.dart';
 
 import '../../support/fakes.dart';
 
@@ -35,7 +36,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Select Organization'), findsOneWidget);
+    expect(find.text('Select Workspace'), findsOneWidget);
     expect(find.text('Example University'), findsOneWidget);
     await tester.tap(find.byKey(const Key('organization_ABC123')));
     await tester.pumpAndSettle();
@@ -75,12 +76,12 @@ void main() {
           ),
           organizationRepositoryProvider.overrideWithValue(repository),
         ],
-        child: const TksNexaApp(),
+        child: const MaterialApp(home: OrganizationSelectionScreen()),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Select Organization'), findsOneWidget);
+    expect(find.text('Select Workspace'), findsOneWidget);
     expect(find.text('Recent'), findsOneWidget);
     final recentY = tester
         .getTopLeft(find.byKey(const Key('organization_ABC123')))

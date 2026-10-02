@@ -1,4 +1,4 @@
-package com.tksnexa.attendance
+package com.tksnexa.thekhansoft
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -15,7 +15,7 @@ import java.security.spec.ECGenParameterSpec
 import java.security.MessageDigest
 
 class MainActivity : FlutterActivity() {
-    private val channelName = "com.tksnexa.attendance/device_security"
+    private val channelName = "com.tksnexa.thekhansoft/device_security"
     private val keyAlias = "tks_nexa_attendance_device_signing_v1"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

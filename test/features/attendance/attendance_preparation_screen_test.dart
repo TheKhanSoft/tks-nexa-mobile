@@ -29,12 +29,12 @@ void main() {
       ),
     );
 
-    await tester.scrollUntilVisible(find.text('Fresh location'), 250);
-    expect(find.text('Fresh location'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Temporary face capture'), 250);
-    expect(find.text('Temporary face capture'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Fresh Location'), 250);
+    expect(find.text('Fresh Location'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Face Photo'), 250);
+    expect(find.text('Face Photo'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Fresh location'), -250);
+    await tester.scrollUntilVisible(find.text('Fresh Location'), -250);
 
     await tester.tap(find.byKey(const Key('capture_location')));
     await tester.pumpAndSettle();

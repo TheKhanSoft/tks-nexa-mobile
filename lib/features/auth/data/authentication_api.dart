@@ -41,8 +41,21 @@ class AuthenticationApi implements AuthenticationService {
       if (token is! String || token.trim().isEmpty) throw _invalidResponse;
 
       final employee = payload['employee'];
+      final user = payload['user'];
       String? employeeName;
       String? photoUrl;
+      bool mustChangePassword = payload['must_change_password'] == true ||
+          payload['requires_password_change'] == true;
+      bool hasPhoto = payload['has_photo'] != false &&
+          payload['requires_photo_upload'] != true;
+
+      if (user is Map) {
+        if (user['must_change_password'] == true ||
+            user['requires_password_change'] == true) {
+          mustChangePassword = true;
+        }
+      }
+
       if (employee is Map) {
         final name = employee['full_name'] ?? employee['name'];
         if (name is String && name.trim().isNotEmpty) {
@@ -51,12 +64,42 @@ class AuthenticationApi implements AuthenticationService {
         final rawPhotoUrl = employee['photo_url'];
         if (rawPhotoUrl is String && rawPhotoUrl.trim().isNotEmpty) {
           photoUrl = rawPhotoUrl.trim();
+          hasPhoto = true;
+        } else if (rawPhotoUrl == null && employee.containsKey('photo_url')) {
+          hasPhoto = false;
+        }
+        if (employee['must_change_password'] == true ||
+            employee['requires_password_change'] == true) {
+          mustChangePassword = true;
+        }
+        if (employee['has_photo'] == false ||
+            employee['requires_photo_upload'] == true) {
+          hasPhoto = false;
         }
       }
+
+      final actionRequired = (payload['action_required'] ??
+          (employee is Map ? employee['action_required'] : null)) as String?;
+      final actionMessage = (payload['action_message'] ??
+          (employee is Map ? employee['action_message'] : null)) as String?;
+      final passwordChangeMessage = (payload['password_change_message'] ??
+          (employee is Map ? employee['password_change_message'] : null)) as String?;
+      final photoWarningMessage = (payload['photo_warning_message'] ??
+          (employee is Map ? employee['photo_warning_message'] : null)) as String?;
+      final redirectTarget = (payload['redirect_target'] ??
+          (employee is Map ? employee['redirect_target'] : null)) as String?;
+
       return AuthSession(
         accessToken: token.trim(),
         employeeName: employeeName,
         photoUrl: photoUrl,
+        mustChangePassword: mustChangePassword,
+        hasPhoto: hasPhoto,
+        actionRequired: actionRequired,
+        actionMessage: actionMessage,
+        passwordChangeMessage: passwordChangeMessage,
+        photoWarningMessage: photoWarningMessage,
+        redirectTarget: redirectTarget,
       );
     } on DioException catch (error) {
       throw switch (error.response?.statusCode) {

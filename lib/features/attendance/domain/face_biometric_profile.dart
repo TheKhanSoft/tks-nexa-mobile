@@ -31,6 +31,7 @@ class LocalFaceVerification {
     required this.livenessPassed,
     required this.challenge,
     required this.modelVersion,
+    this.liveVector,
   });
 
   final double similarity;
@@ -38,6 +39,7 @@ class LocalFaceVerification {
   final bool livenessPassed;
   final String challenge;
   final String modelVersion;
+  final List<double>? liveVector;
 
   bool get matched => similarity >= threshold;
   bool get accepted => matched && livenessPassed;

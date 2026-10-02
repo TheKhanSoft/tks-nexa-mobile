@@ -16,7 +16,7 @@ class DioFactory {
 
   static Dio createTenantClient(AppConfig config, Uri tenantApiBaseUri) {
     // Keep the trusted tenant origin, but enforce the Laravel tenant route
-    // contract independently from the central /mobile/v1 directory route.
+    // contract (/api/mobile) independently from the central /mobile/v1 directory route.
     final tenantBaseUri = tenantApiBaseUri.replace(
       path: '/api/mobile',
       query: null,
@@ -33,19 +33,18 @@ class DioFactory {
         ? baseUri.toString()
         : '${baseUri.toString()}/';
     return Dio(
-        BaseOptions(
-          baseUrl: baseUrl,
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 15),
-          sendTimeout: const Duration(seconds: 10),
-          responseType: ResponseType.json,
-          headers: const {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-          },
-        ),
-      )
-      ..interceptors.addAll([
+      BaseOptions(
+        baseUrl: baseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 15),
+        sendTimeout: const Duration(seconds: 10),
+        responseType: ResponseType.json,
+        headers: const {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      ),
+    )..interceptors.addAll([
         if (config.allowsLocalHttp)
           LocalDevelopmentHostInterceptor(
             connectHost: config.developmentConnectHost,

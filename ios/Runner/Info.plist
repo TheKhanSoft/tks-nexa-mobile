@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>TKS Nexa Attendance</string>
+	<string>TKS Nexa</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>TKS Nexa Attendance</string>
+	<string>TKS Nexa</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is used to scan organization QR codes and capture temporary face verification evidence during an attendance attempt.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

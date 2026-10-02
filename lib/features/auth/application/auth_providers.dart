@@ -51,6 +51,60 @@ class CurrentAuthSessionController extends Notifier<AuthSession?> {
   void setSession(AuthSession session) => state = session;
 
   void clear() => state = null;
+
+  void updateAfterPasswordChanged() {
+    final current = state;
+    if (current != null) {
+      final updated = current.copyWith(
+        mustChangePassword: false,
+        actionRequired: current.actionRequired == 'change_password' ? null : current.actionRequired,
+      );
+      state = updated;
+      _persistSession(updated);
+    }
+  }
+
+  void updatePhotoUrl(String newPhotoUrl) {
+    final current = state;
+    if (current != null) {
+      final updated = current.copyWith(
+        photoUrl: newPhotoUrl,
+        hasPhoto: true,
+        actionRequired: current.actionRequired == 'upload_photo' ? null : current.actionRequired,
+      );
+      state = updated;
+      _persistSession(updated);
+    }
+  }
+
+  void _persistSession(AuthSession session) {
+    final organization = ref.read(organizationSessionProvider).value;
+    if (organization != null) {
+      final storage = ref.read(secureStorageServiceProvider);
+      final key = 'tenant:${organization.code.toLowerCase()}';
+      storage.write('$key:auth_session', session.encode());
+    }
+  }
+
+  Future<AuthSession?> restoreForOrganization(String organizationCode) async {
+    final storage = ref.read(secureStorageServiceProvider);
+    final rawSession = await storage.read(
+      'tenant:${organizationCode.toLowerCase()}:auth_session',
+    );
+    var session = AuthSession.decode(rawSession);
+    if (session == null) {
+      final rawToken = await storage.read(
+        'tenant:${organizationCode.toLowerCase()}:access_token',
+      );
+      if (rawToken != null && rawToken.trim().isNotEmpty) {
+        session = AuthSession(accessToken: rawToken.trim());
+      }
+    }
+    if (session != null) {
+      state = session;
+    }
+    return session;
+  }
 }
 
 class LoginController extends AsyncNotifier<void> {
@@ -70,12 +124,10 @@ class LoginController extends AsyncNotifier<void> {
       final session = await ref
           .read(authenticationServiceProvider)
           .login(method: method, identifier: identifier, password: password);
-      await ref
-          .read(secureStorageServiceProvider)
-          .write(
-            'tenant:${organization.code.toLowerCase()}:access_token',
-            session.accessToken,
-          );
+      final storage = ref.read(secureStorageServiceProvider);
+      final key = 'tenant:${organization.code.toLowerCase()}';
+      await storage.write('$key:access_token', session.accessToken);
+      await storage.write('$key:auth_session', session.encode());
       ref.read(currentAuthSessionProvider.notifier).setSession(session);
       state = const AsyncData(null);
       return true;
@@ -96,14 +148,11 @@ class LoginController extends AsyncNotifier<void> {
           // Local logout must still succeed if the server session expired.
         }
       }
-      await ref
-          .read(secureStorageServiceProvider)
-          .delete('tenant:${organization.code.toLowerCase()}:access_token');
-      await ref
-          .read(secureStorageServiceProvider)
-          .delete(
-            'tenant:${organization.code.toLowerCase()}:face_biometric_profile',
-          );
+      final storage = ref.read(secureStorageServiceProvider);
+      final key = 'tenant:${organization.code.toLowerCase()}';
+      await storage.delete('$key:access_token');
+      await storage.delete('$key:auth_session');
+      await storage.delete('$key:face_biometric_profile');
     }
     ref.read(currentAuthSessionProvider.notifier).clear();
     state = const AsyncData(null);

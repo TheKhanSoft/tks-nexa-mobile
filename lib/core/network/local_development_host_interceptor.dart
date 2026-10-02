@@ -18,7 +18,8 @@ class LocalDevelopmentHostInterceptor extends Interceptor {
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     final requestUri = options.uri;
     final host = requestUri.host.toLowerCase();
-    if (requestUri.scheme != 'http' || !host.endsWith('.localhost')) {
+    final isLocalHost = host == 'localhost' || host.endsWith('.localhost');
+    if (requestUri.scheme != 'http' || !isLocalHost) {
       handler.next(options);
       return;
     }
@@ -43,12 +44,17 @@ class LocalDevelopmentHostInterceptor extends Interceptor {
       return;
     }
 
+    final targetConnectHost =
+        (connectHost != null && connectHost!.trim().isNotEmpty)
+            ? connectHost!.trim()
+            : '10.0.2.2';
+
     options.headers['Host'] = requestUri.hasPort
         ? '${requestUri.host}:${requestUri.port}'
         : requestUri.host;
     options.baseUrl = Uri(
       scheme: connectScheme,
-      host: connectHost ?? 'localhost',
+      host: targetConnectHost,
       port: connectPort ?? (requestUri.hasPort ? requestUri.port : null),
     ).toString();
     options.path = requestUri.path;

@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:tks_nexa_attendance/app/app_router.dart';
 import 'package:tks_nexa_attendance/app/app_theme.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
+import 'package:tks_nexa_attendance/features/account/application/account_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_hardware_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
-import 'package:tks_nexa_attendance/features/attendance/domain/attendance_mark.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_challenge.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/camera_corroboration.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_biometric_profile.dart';
@@ -25,14 +25,24 @@ class AttendancePreparationScreen extends ConsumerStatefulWidget {
 
 class _AttendancePreparationScreenState
     extends ConsumerState<AttendancePreparationScreen> {
-  static const _maximumLocationAge = Duration(seconds: 15);
+  static const _maximumLocationAge = Duration(seconds: 30);
   static const _maximumLocationAccuracyM = 50.0;
 
   LocationEvidence? _location;
   FaceCaptureEvidence? _faceCapture;
   String? _locationError;
   bool _capturingLocation = false;
-  AttendanceType _attendanceType = AttendanceType.checkIn;
+
+  @override
+  void initState() {
+    super.initState();
+    // Automatically trigger fresh GPS location capture on screen load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _location == null && !_capturingLocation) {
+        _captureLocation();
+      }
+    });
+  }
 
   bool _locationReady(double maximumAccuracyM) {
     final location = _location;
@@ -81,6 +91,14 @@ class _AttendancePreparationScreenState
   }
 
   Future<void> _captureFace() async {
+    // Automatically refresh location if missing or stale (>30s old) before photo capture
+    final now = DateTime.now().toUtc();
+    if (_location == null ||
+        !_location!.isFreshAt(now, maximumAge: _maximumLocationAge)) {
+      await _captureLocation();
+      if (!mounted) return;
+    }
+
     final capture = await Navigator.of(context).push<FaceCaptureEvidence>(
       MaterialPageRoute(builder: (_) => const FaceCaptureScreen()),
     );
@@ -94,7 +112,86 @@ class _AttendancePreparationScreenState
     setState(() => _faceCapture = null);
   }
 
+  Future<void> _captureAndUploadPhoto() async {
+    final capture = await Navigator.of(context).push<FaceCaptureEvidence>(
+      MaterialPageRoute(
+        builder: (_) => const FaceCaptureScreen(
+          title: 'Enroll Profile Photo',
+          instruction: 'Center your face clearly in frame',
+        ),
+      ),
+    );
+    if (!mounted || capture == null) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => const PopScope(
+        canPop: false,
+        child: Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text('Uploading photo & enrolling face…'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final photoUrl = await ref
+          .read(photoUploadControllerProvider.notifier)
+          .uploadPhoto(photoBytes: capture.bytes);
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+
+      if (!mounted) return;
+      if (photoUrl != null && photoUrl.isNotEmpty) {
+        ref.invalidate(faceBiometricProfileProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile photo uploaded and face profile enrolled!'),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to upload photo. Please try again.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e is AppFailure ? e.message : 'Photo upload failed.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _submitAttendance() async {
+    final now = DateTime.now().toUtc();
+    if (_location == null ||
+        !_location!.isFreshAt(now, maximumAge: _maximumLocationAge)) {
+      await _captureLocation();
+    }
+
     final location = _location;
     final capture = _faceCapture;
     if (location == null ||
@@ -104,7 +201,7 @@ class _AttendancePreparationScreenState
     }
     final result = await ref
         .read(attendanceSubmissionProvider.notifier)
-        .submit(capture: capture, location: location, type: _attendanceType);
+        .submit(capture: capture, location: location);
     if (!mounted || result == null) return;
     _discardFaceCapture(_faceCapture);
     setState(() => _faceCapture = null);
@@ -120,7 +217,7 @@ class _AttendancePreparationScreenState
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.verified_rounded, color: AppPalette.emerald),
-        title: const Text('Attendance recorded'),
+        title: const Text('Attendance Recorded'),
         content: Text(
           result.trustScore == null
               ? result.message
@@ -168,7 +265,7 @@ class _AttendancePreparationScreenState
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Secure attendance',
+          'Mark Attendance',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
       ),
@@ -195,7 +292,7 @@ class _AttendancePreparationScreenState
                 ),
                 SizedBox(height: 18),
                 Text(
-                  'Verify your presence',
+                  'Verify Your Presence',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 23,
@@ -204,7 +301,7 @@ class _AttendancePreparationScreenState
                 ),
                 SizedBox(height: 7),
                 Text(
-                  'Location is captured only for this attempt. The face image is temporary and must be verified by the server before attendance can be recorded.',
+                  'Location is automatically captured for this attempt. Face verification evidence and phone hardware telemetry are sent securely.',
                   style: TextStyle(color: Colors.white70, height: 1.45),
                 ),
               ],
@@ -212,7 +309,7 @@ class _AttendancePreparationScreenState
           ),
           const SizedBox(height: 22),
           if (insecureLanBrowser) ...[
-            _BrowserSecurityNotice(),
+            const _BrowserSecurityNotice(),
             const SizedBox(height: 14),
           ],
           _ChallengeReadinessCard(
@@ -223,51 +320,13 @@ class _AttendancePreparationScreenState
           _BiometricReadinessCard(
             profile: biometricProfile,
             onRetry: () => ref.invalidate(faceBiometricProfileProvider),
-          ),
-          const SizedBox(height: 14),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Attendance action',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: SegmentedButton<AttendanceType>(
-                      segments: const [
-                        ButtonSegment(
-                          value: AttendanceType.checkIn,
-                          icon: Icon(Icons.login_rounded),
-                          label: Text('Check in'),
-                        ),
-                        ButtonSegment(
-                          value: AttendanceType.checkOut,
-                          icon: Icon(Icons.logout_rounded),
-                          label: Text('Check out'),
-                        ),
-                      ],
-                      selected: {_attendanceType},
-                      onSelectionChanged: submission.isLoading
-                          ? null
-                          : (selection) => setState(
-                              () => _attendanceType = selection.single,
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            onUploadPhoto: _captureAndUploadPhoto,
           ),
           const SizedBox(height: 14),
           _EvidenceCard(
             step: '1',
             icon: Icons.my_location_rounded,
-            title: 'Fresh location',
+            title: 'Fresh Location',
             subtitle: _locationDescription(),
             ready: locationReady,
             error: _locationError,
@@ -281,7 +340,7 @@ class _AttendancePreparationScreenState
                     )
                   : const Icon(Icons.gps_fixed_rounded),
               label: Text(
-                _location == null ? 'Get current location' : 'Refresh location',
+                _location == null ? 'Acquiring GPS…' : 'Refresh Location',
               ),
             ),
           ),
@@ -289,9 +348,9 @@ class _AttendancePreparationScreenState
           _EvidenceCard(
             step: '2',
             icon: Icons.face_retouching_natural_rounded,
-            title: 'Temporary face capture',
+            title: 'Face Photo',
             subtitle: faceCapture == null
-                ? 'Use the front camera for server-side face and liveness verification.'
+                ? 'Align face inside frame for on-device verification.'
                 : 'Captured at ${_formatTime(faceCapture.capturedAt)} · ${(faceCapture.bytes.length / 1024).round()} KB',
             ready: faceCapture != null,
             preview: faceCapture == null
@@ -312,13 +371,13 @@ class _AttendancePreparationScreenState
                     key: const Key('open_face_camera'),
                     onPressed: _captureFace,
                     icon: const Icon(Icons.camera_alt_rounded),
-                    label: Text(faceCapture == null ? 'Open camera' : 'Retake'),
+                    label: Text(faceCapture == null ? 'Open Camera' : 'Retake'),
                   ),
                 ),
                 if (faceCapture != null) ...[
                   const SizedBox(width: 10),
                   IconButton.outlined(
-                    tooltip: 'Remove face capture',
+                    tooltip: 'Remove photo',
                     onPressed: _removeFaceCapture,
                     icon: const Icon(Icons.delete_outline_rounded),
                   ),
@@ -343,7 +402,7 @@ class _AttendancePreparationScreenState
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'The app sends evidence—not a client-side “verified” decision. Laravel remains authoritative for location, identity, schedule, duplicates, and attendance time.',
+                    'Location, face evidence, and mobile hardware details are sent to the central server. The server automatically determines Check-in / Check-out status based on your shift.',
                     style: TextStyle(height: 1.4),
                   ),
                 ),
@@ -370,7 +429,7 @@ class _AttendancePreparationScreenState
             label: Text(
               submission.isLoading
                   ? 'Verifying securely…'
-                  : 'Verify & mark attendance',
+                  : 'Verify & Mark Attendance',
             ),
           ),
           if (submissionError != null) ...[
@@ -383,6 +442,27 @@ class _AttendancePreparationScreenState
                 fontWeight: FontWeight.w700,
               ),
             ),
+            if (submission.error is AppFailure &&
+                (submission.error as AppFailure).diagnosticCode ==
+                    'PASSWORD_CHANGE_REQUIRED') ...[
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                onPressed: () => context.push(AppRoutes.changePassword),
+                icon: const Icon(Icons.lock_reset_rounded),
+                label: const Text('Change Password Now'),
+              ),
+            ] else if (submission.error is AppFailure &&
+                ((submission.error as AppFailure).diagnosticCode ==
+                        'PHOTO_REQUIRED' ||
+                    (submission.error as AppFailure).diagnosticCode ==
+                        'FACE_NOT_ENROLLED')) ...[
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                onPressed: _captureAndUploadPhoto,
+                icon: const Icon(Icons.camera_alt_rounded),
+                label: const Text('Upload Profile Photo Now'),
+              ),
+            ],
           ],
         ],
       ),
@@ -392,7 +472,7 @@ class _AttendancePreparationScreenState
   String _locationDescription() {
     final location = _location;
     if (location == null) {
-      return 'Capture a new high-accuracy position for this attempt only.';
+      return 'Automatically acquiring fresh GPS coordinates…';
     }
     final mockNote = location.isMocked
         ? ' · device reported mock telemetry'
@@ -438,7 +518,7 @@ class _ChallengeReadinessCard extends StatelessWidget {
         AsyncData(:final value) => ListTile(
           leading: const CircleAvatar(child: Icon(Icons.policy_rounded)),
           title: Text(
-            value.location?.name ?? 'Attendance policy ready',
+            value.location?.name ?? 'Attendance Policy Ready',
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           subtitle: Text(
@@ -457,7 +537,7 @@ class _ChallengeReadinessCard extends StatelessWidget {
             color: Theme.of(context).colorScheme.error,
           ),
           title: const Text(
-            'Attendance policy unavailable',
+            'Attendance Policy Unavailable',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
           subtitle: Text(
@@ -476,7 +556,7 @@ class _ChallengeReadinessCard extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
           title: Text(
-            'Preparing secure attendance',
+            'Preparing Secure Attendance',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
           subtitle: Text('Loading location and verification policy…'),
@@ -487,10 +567,15 @@ class _ChallengeReadinessCard extends StatelessWidget {
 }
 
 class _BiometricReadinessCard extends StatelessWidget {
-  const _BiometricReadinessCard({required this.profile, required this.onRetry});
+  const _BiometricReadinessCard({
+    required this.profile,
+    required this.onRetry,
+    required this.onUploadPhoto,
+  });
 
   final AsyncValue<FaceBiometricProfile> profile;
   final VoidCallback onRetry;
+  final VoidCallback onUploadPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -499,13 +584,13 @@ class _BiometricReadinessCard extends StatelessWidget {
     final (icon, title, subtitle, color) = switch (profile) {
       AsyncData() => (
         Icons.verified_user_rounded,
-        'Face enrollment ready',
-        'The encrypted 512-value reference profile is available.',
+        'Face Profile Ready',
+        'Protected 512-value biometric profile active.',
         AppPalette.emerald,
       ),
       AsyncError(:final error) => (
         Icons.face_retouching_off_rounded,
-        'Face enrollment unavailable',
+        'Face Profile Unavailable',
         error is AppFailure
             ? error.message
             : 'The face profile could not be loaded.',
@@ -513,7 +598,7 @@ class _BiometricReadinessCard extends StatelessWidget {
       ),
       _ => (
         Icons.downloading_rounded,
-        'Loading face enrollment',
+        'Loading Face Profile',
         'Checking the protected employee biometric profile…',
         Theme.of(context).colorScheme.primary,
       ),
@@ -532,10 +617,21 @@ class _BiometricReadinessCard extends StatelessWidget {
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
         subtitle: Text(subtitle),
         trailing: profile.hasError
-            ? IconButton(
-                tooltip: 'Retry enrollment profile',
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh_rounded),
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Retry enrollment profile',
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded),
+                  ),
+                  const SizedBox(width: 4),
+                  FilledButton.tonalIcon(
+                    onPressed: onUploadPhoto,
+                    icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                    label: const Text('Upload Photo'),
+                  ),
+                ],
               )
             : null,
       ),
