@@ -19,66 +19,39 @@ class AttendanceHistoryScreen extends ConsumerWidget {
     final historyAsync = ref.watch(attendanceHistoryResponseProvider);
     final is24Hour =
         ref.watch(appPreferencesProvider).value?.use24HourTime ?? false;
-    final scaffoldBg = Theme.of(context).scaffoldBackgroundColor;
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        RefreshIndicator(
-          onRefresh: () async {
-            ref.invalidate(attendanceHistoryResponseProvider);
-          },
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 116),
-            children: [
-              const _FilterBar(),
-              const SizedBox(height: 16),
-              historyAsync.when(
-                loading: () => const _HistoryHeaderLoading(),
-                error: (err, stack) => _HistoryErrorCard(
-                  message: 'Unable to load attendance history.',
-                  onRetry: () =>
-                      ref.invalidate(attendanceHistoryResponseProvider),
-                ),
-                data: (history) => _HistoryContent(
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(attendanceHistoryResponseProvider);
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        children: [
+          const _FilterBar(),
+          const SizedBox(height: 16),
+          historyAsync.when(
+            loading: () => const _HistoryHeaderLoading(),
+            error: (err, stack) => _HistoryErrorCard(
+              message: 'Unable to load attendance history.',
+              onRetry: () =>
+                  ref.invalidate(attendanceHistoryResponseProvider),
+            ),
+            data: (history) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _HistoryContent(
                   records: history.records,
                   fromDate: filterState.fromDate,
                   toDate: filterState.toDate,
                   is24Hour: is24Hour,
                 ),
-              ),
-            ],
-          ),
-        ),
-        // Soft fade so list content slides under the CTA cleanly.
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 104,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    scaffoldBg.withValues(alpha: 0),
-                    scaffoldBg,
-                  ],
-                ),
-              ),
+                const SizedBox(height: 24),
+                const _RegularizationButton(),
+              ],
             ),
           ),
-        ),
-        // Pinned CTA button
-        Positioned(
-          left: 20,
-          right: 20,
-          bottom: 14,
-          child: const _RegularizationButton(),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -101,7 +74,7 @@ class _FilterBar extends ConsumerWidget {
         scrollDirection: Axis.horizontal,
         clipBehavior: Clip.none,
         itemCount: AttendanceDateFilter.values.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (context, index) {
           final item = AttendanceDateFilter.values[index];
           final isSelected = filterState.filter == item;
@@ -829,6 +802,26 @@ class _DailyActivityTile extends StatelessWidget {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            if (record.photoUrl != null && record.photoUrl!.isNotEmpty) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  width: 40,
+                                  height: 40,
+                                  color: style.color.withValues(alpha: 0.15),
+                                  child: Image.network(
+                                    record.photoUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 18,
+                                      color: style.color,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

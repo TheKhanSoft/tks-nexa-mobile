@@ -154,7 +154,12 @@ class AttendanceSubmissionController
     }
     state = const AsyncLoading();
     try {
-      final profile = await ref.read(faceBiometricProfileProvider.future);
+      FaceBiometricProfile profile;
+      try {
+        profile = await ref.refresh(faceBiometricProfileProvider.future);
+      } catch (_) {
+        profile = await ref.read(faceBiometricProfileProvider.future);
+      }
       final verification = await ref
           .read(faceVerificationServiceProvider)
           .verify(capture: capture, enrolledProfile: profile);

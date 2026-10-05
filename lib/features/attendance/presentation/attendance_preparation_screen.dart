@@ -7,6 +7,7 @@ import 'package:tks_nexa_attendance/app/app_theme.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/features/account/application/account_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_hardware_providers.dart';
+import 'package:tks_nexa_attendance/features/attendance/application/attendance_history_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_challenge.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_mark.dart';
@@ -214,6 +215,8 @@ class _AttendancePreparationScreenState
     if (!mounted || result == null) return;
     _discardFaceCapture(_faceCapture);
     setState(() => _faceCapture = null);
+    ref.invalidate(attendanceHistoryResponseProvider);
+    ref.invalidate(employeeProfileProvider);
     final cameraResult = result.cameraCorroboration;
     if (cameraResult != null &&
         (cameraResult.status == CameraCorroborationStatus.challengeRequired ||
@@ -221,6 +224,9 @@ class _AttendancePreparationScreenState
                 CameraCorroborationStatus.waitingForCamera)) {
       context.push(AppRoutes.cameraVerification, extra: cameraResult);
       return;
+    }
+    if (context.canPop()) {
+      context.pop(result);
     }
   }
 

@@ -85,8 +85,8 @@ void main() {
 
     // Initial verifying state
     expect(find.text('BIOMETRIC SCANNING & MATCHING'), findsOneWidget);
-    expect(find.text('EDGE-NET 512D'), findsOneWidget);
-    expect(find.text('L2 UNIT |v|=1'), findsOneWidget);
+    expect(find.text('FACE SCAN'), findsOneWidget);
+    expect(find.text('LIVE CHECK'), findsOneWidget);
 
     // Advance timer past the 1.6s visual delay
     await tester.pump(const Duration(milliseconds: 1700));

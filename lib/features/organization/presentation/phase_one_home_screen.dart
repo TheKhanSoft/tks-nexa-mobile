@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,8 @@ import 'package:tks_nexa_attendance/features/account/presentation/account_screen
 import 'package:tks_nexa_attendance/features/account/presentation/employee_avatar.dart';
 import 'package:tks_nexa_attendance/features/auth/application/auth_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_history_providers.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
+import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/attendance_history_screen.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/mobile_attendance_log_screen.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
@@ -655,8 +658,24 @@ class _TodaysAttendanceCard extends ConsumerWidget {
     final shift = profile?.assignedShift;
     final is24Hour = ref.watch(appPreferencesProvider).value?.use24HourTime ?? false;
 
+    final historyAsync = ref.watch(attendanceHistoryResponseProvider);
+    final now = DateTime.now();
+    final todayRec = historyAsync.value?.records.where((r) =>
+        r.date.year == now.year &&
+        r.date.month == now.month &&
+        r.date.day == now.day).firstOrNull;
+
     final (statusLabel, statusColor, statusIcon, statusSubtitle) =
-        _getTodayStatusInfo(profile);
+        (todayRec != null && todayRec.firstInFormatted != null && todayRec.firstInFormatted != '--:--')
+            ? (
+                todayRec.status.toUpperCase(),
+                todayRec.isPresent
+                    ? const Color(0xFF10B981)
+                    : (todayRec.isLate ? const Color(0xFFF59E0B) : const Color(0xFF2563EB)),
+                todayRec.isPresent ? Icons.check_circle_rounded : Icons.access_time_filled_rounded,
+                'Punch In: ${todayRec.firstInFormatted} · ${todayRec.lastOutFormatted != null ? 'Punch Out: ${todayRec.lastOutFormatted}' : 'Checked In (Active)'}',
+              )
+            : _getTodayStatusInfo(profile);
 
     return Container(
       decoration: BoxDecoration(
@@ -1006,7 +1025,7 @@ class _HeroMetricItem extends StatelessWidget {
   }
 }
 
-class _RecentAttendanceSection extends StatelessWidget {
+class _RecentAttendanceSection extends ConsumerWidget {
   const _RecentAttendanceSection({
     required this.profile,
     required this.onOpenHistory,
@@ -1016,9 +1035,11 @@ class _RecentAttendanceSection extends StatelessWidget {
   final VoidCallback onOpenHistory;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final items = _generateRecentDays(profile);
+    final historyAsync = ref.watch(attendanceHistoryResponseProvider);
+    final records = historyAsync.value?.records ?? const <AttendanceRecord>[];
+    final items = _generateRecentDays(profile, records);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1049,10 +1070,11 @@ class _RecentAttendanceSection extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
               return _RecentDayCard(
                 item: items[index],
+                onTap: onOpenHistory,
               );
             },
           ),
@@ -1061,63 +1083,130 @@ class _RecentAttendanceSection extends StatelessWidget {
     );
   }
 
-  List<_RecentDayItem> _generateRecentDays(EmployeeProfile? profile) {
+  List<_RecentDayItem> _generateRecentDays(
+    EmployeeProfile? profile,
+    List<AttendanceRecord> records,
+  ) {
     final now = DateTime.now();
     final days = <_RecentDayItem>[];
-    final shiftName = profile?.assignedShift?.name ?? 'Morning Shift';
+    final shiftName = profile?.assignedShift?.name ?? 'Standard Shift';
 
-    for (var i = 1; i <= 5; i++) {
-      final date = now.subtract(Duration(days: i));
-      final isWeekend =
-          date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+    // 1. Check if today is in records
+    final todayRec = records.where((r) =>
+        r.date.year == now.year &&
+        r.date.month == now.month &&
+        r.date.day == now.day).firstOrNull;
 
-      if (isWeekend) {
-        days.add(_RecentDayItem(
-          date: date,
-          status: 'OFF DAY',
-          color: const Color(0xFF6B7280),
-          icon: Icons.weekend_rounded,
-          subtitle: 'Weekly Off',
-          timeRange: 'Off Day',
-        ));
-      } else if (i == 1) {
-        days.add(_RecentDayItem(
-          date: date,
-          status: 'PRESENT',
-          color: const Color(0xFF10B981),
-          icon: Icons.check_circle_rounded,
-          subtitle: '$shiftName · 100% Trust',
-          timeRange: '08:02 AM - 05:01 PM',
-        ));
-      } else if (i == 2) {
-        days.add(_RecentDayItem(
-          date: date,
-          status: 'PRESENT',
-          color: const Color(0xFF10B981),
-          icon: Icons.check_circle_rounded,
-          subtitle: '$shiftName · 98% Trust',
-          timeRange: '08:05 AM - 05:00 PM',
-        ));
-      } else if (i == 3) {
-        days.add(_RecentDayItem(
-          date: date,
-          status: 'DUTY',
-          color: const Color(0xFF2563EB),
-          icon: Icons.business_center_rounded,
-          subtitle: 'Official Duty',
-          timeRange: '08:00 AM - 05:00 PM',
-        ));
+    if (todayRec != null &&
+        todayRec.firstInFormatted != null &&
+        todayRec.firstInFormatted != '--:--') {
+      final isPres = todayRec.isPresent;
+      final isLate = todayRec.isLate;
+      days.add(_RecentDayItem(
+        date: now,
+        status: todayRec.status.toUpperCase(),
+        color: isPres
+            ? const Color(0xFF10B981)
+            : (isLate ? const Color(0xFFF59E0B) : const Color(0xFF2563EB)),
+        icon: isPres
+            ? Icons.check_circle_rounded
+            : (isLate ? Icons.access_time_filled_rounded : Icons.verified_user_rounded),
+        subtitle:
+            '${todayRec.shiftName.isNotEmpty ? todayRec.shiftName : shiftName} · ${todayRec.trustScore ?? 100}% Trust',
+        timeRange:
+            '${todayRec.firstInFormatted ?? '--:--'} - ${todayRec.lastOutFormatted ?? 'Active'}',
+        capturedPhotoUrl: todayRec.photoUrl,
+      ));
+    } else {
+      days.add(_RecentDayItem(
+        date: now,
+        status: 'PENDING',
+        color: const Color(0xFFF59E0B),
+        icon: Icons.pending_actions_rounded,
+        subtitle: '$shiftName · Awaiting punch',
+        timeRange: 'Not marked yet',
+        capturedPhotoUrl: null,
+      ));
+    }
+
+    // 2. Add past records (excluding today)
+    for (final rec in records) {
+      if (rec.date.year == now.year &&
+          rec.date.month == now.month &&
+          rec.date.day == now.day) {
+        continue;
+      }
+      if (days.length >= 7) break;
+
+      final isPres = rec.isPresent;
+      final isLate = rec.isLate;
+      final isOff = (rec.date.weekday == DateTime.saturday ||
+              rec.date.weekday == DateTime.sunday) ||
+          rec.isOffDay;
+      final isDuty = rec.isOfficialDuty;
+      final isLeave = rec.isOnLeave;
+
+      Color color;
+      IconData icon;
+      if (isPres) {
+        color = const Color(0xFF10B981);
+        icon = Icons.check_circle_rounded;
+      } else if (isLate) {
+        color = const Color(0xFFF59E0B);
+        icon = Icons.access_time_filled_rounded;
+      } else if (isDuty) {
+        color = const Color(0xFF2563EB);
+        icon = Icons.business_center_rounded;
+      } else if (isLeave) {
+        color = const Color(0xFF8B5CF6);
+        icon = Icons.flight_takeoff_rounded;
+      } else if (isOff) {
+        color = const Color(0xFF6B7280);
+        icon = Icons.weekend_rounded;
       } else {
+        color = const Color(0xFFEF4444);
+        icon = Icons.cancel_rounded;
+      }
+
+      final timeRange = (rec.firstInFormatted != null &&
+              rec.firstInFormatted != '--:--')
+          ? '${rec.firstInFormatted} - ${rec.lastOutFormatted ?? '--:--'}'
+          : (isOff
+              ? 'Weekly Off'
+              : (isLeave
+                  ? 'Approved Leave'
+                  : (isDuty ? 'Official Duty' : 'Absent')));
+
+      days.add(_RecentDayItem(
+        date: rec.date,
+        status: rec.status.toUpperCase(),
+        color: color,
+        icon: icon,
+        subtitle:
+            '${rec.shiftName.isNotEmpty ? rec.shiftName : shiftName} · ${rec.trustScore ?? 100}% Trust',
+        timeRange: timeRange,
+        capturedPhotoUrl: rec.photoUrl,
+      ));
+    }
+
+    // 3. Fallback padding if brand new account with no history
+    if (days.length == 1) {
+      for (var i = 1; i <= 4; i++) {
+        final d = now.subtract(Duration(days: i));
+        final isWeekend =
+            d.weekday == DateTime.saturday || d.weekday == DateTime.sunday;
         days.add(_RecentDayItem(
-          date: date,
-          status: 'PRESENT',
-          color: const Color(0xFF10B981),
-          icon: Icons.check_circle_rounded,
-          subtitle: '$shiftName · 100% Trust',
-          timeRange: '07:58 AM - 05:03 PM',
+          date: d,
+          status: isWeekend ? 'OFF DAY' : 'NOT RECORDED',
+          color: const Color(0xFF6B7280),
+          icon: isWeekend ? Icons.weekend_rounded : Icons.history_rounded,
+          subtitle: '$shiftName · Timesheet',
+          timeRange: isWeekend ? 'Weekly Off' : 'No record',
+          capturedPhotoUrl: null,
         ));
       }
     }
+
     return days;
   }
 }
@@ -1142,73 +1231,68 @@ class _RecentDayItem {
   final String? capturedPhotoUrl;
 }
 
-class _RecentDayCard extends StatelessWidget {
-  const _RecentDayCard({required this.item});
+class _RecentDayCard extends ConsumerWidget {
+  const _RecentDayCard({required this.item, this.onTap});
 
   final _RecentDayItem item;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final dateStr = _formatDateShort(item.date);
 
-    return Container(
-      width: 175,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: item.color.withValues(alpha: 0.35),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        width: 175,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: item.color.withValues(alpha: 0.35),
+            width: 1.2,
           ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Captured Mobile Attendance Picture Header
-          Stack(
-            children: [
-              Container(
-                height: 98,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: item.color.withValues(alpha: 0.16),
-                ),
-                child: item.capturedPhotoUrl != null &&
-                        item.capturedPhotoUrl!.isNotEmpty
-                    ? Image.network(
-                        item.capturedPhotoUrl!,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.center,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _cameraImageFallback(item.color),
-                      )
-                    : _cameraImageFallback(item.color),
-              ),
-              Positioned.fill(
-                child: DecoratedBox(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Captured Mobile Attendance Picture Header
+            Stack(
+              children: [
+                Container(
+                  height: 98,
+                  width: double.infinity,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.3),
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.55),
-                      ],
+                    color: item.color.withValues(alpha: 0.16),
+                  ),
+                  child: _buildItemImage(context, ref, item),
+                ),
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.3),
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.55),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
               // Top-Right Corner Floating Status Badge (ACCEPTED / MATCHED / PENDING / REJECTED / DUTY)
               Positioned(
                 top: 8,
@@ -1308,7 +1392,58 @@ class _RecentDayCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
+  }
+
+  Widget _buildItemImage(BuildContext context, WidgetRef ref, _RecentDayItem item) {
+    final photo = item.capturedPhotoUrl;
+    if (photo != null && photo.isNotEmpty) {
+      if (photo.startsWith('http://') || photo.startsWith('https://')) {
+        return Image.network(
+          photo,
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          errorBuilder: (_, _, _) => _cameraImageFallback(item.color),
+        );
+      } else {
+        final file = File(photo);
+        if (file.existsSync()) {
+          return Image.file(
+            file,
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            errorBuilder: (_, _, _) => _cameraImageFallback(item.color),
+          );
+        }
+      }
+    }
+    // Check local storage for today's selfie
+    final isToday = item.date.day == DateTime.now().day &&
+        item.date.month == DateTime.now().month &&
+        item.date.year == DateTime.now().year;
+    if (isToday) {
+      return FutureBuilder<String?>(
+        future: ref.read(localSelfieStorageProvider).getSelfiePath(date: item.date),
+        builder: (context, snapshot) {
+          final localPath = snapshot.data;
+          if (localPath != null && localPath.isNotEmpty) {
+            final f = File(localPath);
+            if (f.existsSync()) {
+              return Image.file(
+                f,
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+                errorBuilder: (_, _, _) => _cameraImageFallback(item.color),
+              );
+            }
+          }
+          return _cameraImageFallback(item.color);
+        },
+      );
+    }
+
+    return _cameraImageFallback(item.color);
   }
 
   static Widget _cameraImageFallback(Color accentColor) {

@@ -44,10 +44,10 @@ class _BiometricScanningVerificationDialogState
   String? _diagnosticCode;
 
   static const _steps = [
-    'Scanning facial geometry & contours…',
-    'Extracting FaceBiometric-EdgeNet-512 vector…',
-    'Querying Central Nexa Engine (tksnexa.me)…',
-    'Corroborating geofence & device telemetry…',
+    'Scanning facial features…',
+    'Analyzing biometric pattern…',
+    'Verifying identity with server…',
+    'Confirming attendance & location…',
   ];
 
   @override
@@ -307,25 +307,32 @@ class _BiometricScanningVerificationDialogState
           Positioned(
             top: 8,
             left: 10,
-            child: _buildTelemetryTag('EDGE-NET 512D', accentColor),
+            child: _buildTelemetryTag('FACE SCAN', accentColor),
           ),
           Positioned(
             top: 8,
             right: 10,
             child: _buildTelemetryTag(
-              _state == _VerificationState.verifying ? 'MATCHING' : 'ID VALID',
+              _state == _VerificationState.verifying
+                  ? 'MATCHING…'
+                  : (_state == _VerificationState.success ? 'VERIFIED' : 'FAILED'),
               accentColor,
             ),
           ),
           Positioned(
             bottom: 8,
             left: 10,
-            child: _buildTelemetryTag('L2 UNIT |v|=1', accentColor),
+            child: _buildTelemetryTag('LIVE CHECK', accentColor),
           ),
           Positioned(
             bottom: 8,
             right: 10,
-            child: _buildTelemetryTag('THRESH ≥ 70%', accentColor),
+            child: _buildTelemetryTag(
+              _state == _VerificationState.verifying
+                  ? 'ANALYZING'
+                  : (_state == _VerificationState.success ? 'PASSED' : 'CHECK FAILED'),
+              accentColor,
+            ),
           ),
 
           // Center Status Icon for Success / Failure
