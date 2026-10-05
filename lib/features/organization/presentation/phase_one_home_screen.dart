@@ -1130,6 +1130,7 @@ class _RecentDayItem {
     required this.icon,
     required this.subtitle,
     required this.timeRange,
+    this.capturedPhotoUrl,
   });
 
   final DateTime date;
@@ -1138,6 +1139,7 @@ class _RecentDayItem {
   final IconData icon;
   final String subtitle;
   final String timeRange;
+  final String? capturedPhotoUrl;
 }
 
 class _RecentDayCard extends StatelessWidget {
