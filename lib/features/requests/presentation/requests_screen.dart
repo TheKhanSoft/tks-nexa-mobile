@@ -173,7 +173,7 @@ class _LeaveRequestsTab extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
-        if (typesAsync.value case final types? when types.isNotEmpty) ...[
+        if (typesAsync.value case final types? when types.isNotEmpty && types.first.showBalance) ...[
           const Text(
             'Your Year Entitlements (2026)',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: -0.2),

@@ -84,8 +84,14 @@ class AttendanceRecordDto {
 
       // Dynamically compute accurate summary statistics from parsed records if API summary was empty
       if (summary.present == 0 && summary.absent == 0 && summary.late == 0 && records.isNotEmpty) {
-        var p = 0, a = 0, l = 0, leave = 0, duty = 0;
+        var p = 0, a = 0, l = 0, leave = 0, duty = 0, workDays = 0;
+        final now = DateTime.now();
+        final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
         for (final r in records) {
+          final isPastOrToday = !r.date.isAfter(endOfToday);
+          if (!r.isOffDay && isPastOrToday) {
+            workDays++;
+          }
           if (r.isPresent) {
             p++;
           } else if (r.isLate) {
@@ -94,13 +100,13 @@ class AttendanceRecordDto {
             leave++;
           } else if (r.isOfficialDuty) {
             duty++;
-          } else if (r.isAbsent) {
+          } else if (r.isAbsent && isPastOrToday) {
             a++;
           }
         }
         summary = AttendanceSummary(
           totalDays: records.length,
-          totalWorkingDays: records.length,
+          totalWorkingDays: workDays,
           present: p,
           absent: a,
           late: l,

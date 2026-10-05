@@ -23,6 +23,7 @@ class LeaveType {
     required this.requiresDocument,
     required this.year,
     required this.entitlement,
+    this.showBalance = true,
   });
 
   final int id;
@@ -34,6 +35,7 @@ class LeaveType {
   final bool requiresDocument;
   final int year;
   final LeaveEntitlement entitlement;
+  final bool showBalance;
 }
 
 class ApprovalStep {

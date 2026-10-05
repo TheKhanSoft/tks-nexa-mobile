@@ -23,8 +23,10 @@ class AttendanceHistoryScreen extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(attendanceHistoryResponseProvider);
+        await ref.read(attendanceHistoryResponseProvider.future);
       },
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
         children: [
           const _FilterBar(),
@@ -41,6 +43,7 @@ class AttendanceHistoryScreen extends ConsumerWidget {
               children: [
                 _HistoryContent(
                   records: history.records,
+                  serverSummary: history.summary,
                   fromDate: filterState.fromDate,
                   toDate: filterState.toDate,
                   is24Hour: is24Hour,
@@ -180,12 +183,14 @@ class _FilterBar extends ConsumerWidget {
 class _HistoryContent extends StatelessWidget {
   const _HistoryContent({
     required this.records,
+    this.serverSummary,
     required this.fromDate,
     required this.toDate,
     required this.is24Hour,
   });
 
   final List<AttendanceRecord> records;
+  final AttendanceSummary? serverSummary;
   final DateTime fromDate;
   final DateTime toDate;
   final bool is24Hour;
@@ -194,7 +199,7 @@ class _HistoryContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final summary = _HistorySummary(records);
+    final summary = _HistorySummary(records, serverSummary);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,15 +272,22 @@ class _HistoryContent extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _HistorySummary {
-  _HistorySummary(List<AttendanceRecord> records)
-      : workingDays = records.length,
-        presentCount = records.where((r) => r.isPresent).length,
-        lateCount = records.where((r) => r.isLate).length,
-        leaveCount =
-            records.where((r) => r.isOnLeave || r.isOffDay).length,
+  _HistorySummary(List<AttendanceRecord> records, [AttendanceSummary? serverSummary])
+      : workingDays = (serverSummary != null && serverSummary.totalWorkingDays > 0)
+            ? serverSummary.totalWorkingDays
+            : records.where((r) => !r.isOffDay && !r.date.isAfter(DateTime.now())).length,
+        presentCount = (serverSummary != null && serverSummary.present > 0)
+            ? serverSummary.present
+            : records.where((r) => r.isPresent || r.isOfficialDuty).length,
+        lateCount = (serverSummary != null && serverSummary.late > 0)
+            ? serverSummary.late
+            : records.where((r) => r.isLate).length,
+        leaveCount = (serverSummary != null && serverSummary.onLeave > 0)
+            ? serverSummary.onLeave
+            : records.where((r) => r.isOnLeave).length,
         totalMinutes = records.fold<int>(
           0,
-              (sum, r) => sum + _parseMins(r.formattedNetDuration),
+          (sum, r) => sum + _parseMins(r.formattedNetDuration),
         ),
         workedDays = records
             .where((r) => _parseMins(r.formattedNetDuration) > 0)
@@ -289,7 +301,7 @@ class _HistorySummary {
   final int workedDays;
 
   int get ratePercent => workingDays > 0
-      ? (((presentCount + lateCount) / workingDays) * 100).round()
+      ? ((presentCount / workingDays) * 100).round()
       : 100;
 
   /// e.g. "168h 45m" — derived from summing each record's net duration.

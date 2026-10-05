@@ -224,6 +224,9 @@ class AttendanceSubmissionController
         challenge = await ref.refresh(attendanceChallengeProvider.future);
       }
       final capturedAt = DateTime.now().toUtc();
+      final snapshotBytes = capture.croppedFaceBytes ?? capture.bytes;
+      final snapshotBase64Payload =
+          'data:image/jpeg;base64,${base64Encode(snapshotBytes)}';
       final unsignedRequest = AttendanceMarkRequest(
         verification: verification,
         location: location,
@@ -233,7 +236,7 @@ class AttendanceSubmissionController
         platform: key?.platform,
         capturedAt: capturedAt,
         challengeId: challenge.id,
-        snapshotBase64: 'data:image/jpeg;base64,${base64Encode(capture.bytes)}',
+        snapshotBase64: snapshotBase64Payload,
       );
       final deviceEvidence = await ref
           .read(deviceSecurityServiceProvider)
@@ -272,7 +275,7 @@ class AttendanceSubmissionController
               challengeId: challenge.id,
               deviceSignature: deviceEvidence.signature,
               integrityToken: integrityToken,
-              snapshotBase64: 'data:image/jpeg;base64,${base64Encode(capture.bytes)}',
+              snapshotBase64: snapshotBase64Payload,
             ),
           );
       await ref.read(localSelfieStorageProvider).saveSelfie(

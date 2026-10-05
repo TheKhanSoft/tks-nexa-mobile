@@ -21,6 +21,7 @@ class RequestsApi {
         options: _authorized,
       );
       final root = _asMap(response.data);
+      final showBalances = root['show_leave_balances'] != false;
       final list = root['data'] is List ? root['data'] as List : const [];
       return list.whereType<Map>().map((map) {
         final m = Map<String, dynamic>.from(map);
@@ -34,6 +35,7 @@ class RequestsApi {
           defaultDaysAllowed: _int(m['default_days_allowed'], fallback: 10),
           requiresDocument: m['requires_document'] == true,
           year: _int(m['year'], fallback: 2026),
+          showBalance: showBalances,
           entitlement: LeaveEntitlement(
             allocated: _double(ent['allocated']),
             used: _double(ent['used']),

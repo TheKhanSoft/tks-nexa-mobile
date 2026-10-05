@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:tks_nexa_attendance/app/app_theme.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/core/platform/temp_capture_cleanup.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/biometric_photo_crop_helper.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/face_observation_service_factory.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_observation_service.dart';
@@ -145,9 +146,14 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
         bytes.fillRange(0, bytes.length, 0);
         return;
       }
+      final croppedFaceBytes = BiometricPhotoCropHelper.cropFaceOnly(
+        bytes,
+        observation.bounds,
+      );
       setState(() {
         _capture = FaceCaptureEvidence(
           bytes: bytes,
+          croppedFaceBytes: croppedFaceBytes,
           contentType: 'image/jpeg',
           capturedAt: DateTime.now().toUtc(),
           livenessPassed: true,
@@ -493,6 +499,9 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
 void _discardCapture(FaceCaptureEvidence? capture) {
   if (capture == null) return;
   PaintingBinding.instance.imageCache.evict(MemoryImage(capture.bytes));
+  if (capture.croppedFaceBytes != null) {
+    PaintingBinding.instance.imageCache.evict(MemoryImage(capture.croppedFaceBytes!));
+  }
   capture.clear();
 }
 

@@ -210,7 +210,10 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
     try {
       final photoUrl = await ref
           .read(photoUploadControllerProvider.notifier)
-          .uploadPhoto(photoBytes: capture.bytes);
+          .uploadPhoto(
+            photoBytes: capture.bytes,
+            faceBounds: capture.faceBounds,
+          );
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
 
       if (!mounted) return;
@@ -1660,7 +1663,7 @@ Widget _buildPunchSelfieImage(
         photoUrl,
         fit: BoxFit.cover,
         alignment: Alignment.center,
-        errorBuilder: (_, _, _) => _cameraImageFallback(accentColor),
+        errorBuilder: (_, _, _) => _buildLocalSelfieOrFallback(ref, date, accentColor),
       );
     } else {
       final file = File(photoUrl);
@@ -1669,37 +1672,34 @@ Widget _buildPunchSelfieImage(
           file,
           fit: BoxFit.cover,
           alignment: Alignment.center,
-          errorBuilder: (_, _, _) => _cameraImageFallback(accentColor),
+          errorBuilder: (_, _, _) => _buildLocalSelfieOrFallback(ref, date, accentColor),
         );
       }
     }
   }
 
-  final isToday = date.day == DateTime.now().day &&
-      date.month == DateTime.now().month &&
-      date.year == DateTime.now().year;
-  if (isToday) {
-    return FutureBuilder<String?>(
-      future: ref.read(localSelfieStorageProvider).getSelfiePath(date: date),
-      builder: (context, snapshot) {
-        final localPath = snapshot.data;
-        if (localPath != null && localPath.isNotEmpty) {
-          final f = File(localPath);
-          if (f.existsSync()) {
-            return Image.file(
-              f,
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
-              errorBuilder: (_, _, _) => _cameraImageFallback(accentColor),
-            );
-          }
-        }
-        return _cameraImageFallback(accentColor);
-      },
-    );
-  }
+  return _buildLocalSelfieOrFallback(ref, date, accentColor);
+}
 
-  return _cameraImageFallback(accentColor);
+Widget _buildLocalSelfieOrFallback(WidgetRef ref, DateTime date, Color accentColor) {
+  return FutureBuilder<String?>(
+    future: ref.read(localSelfieStorageProvider).getSelfiePath(date: date),
+    builder: (context, snapshot) {
+      final localPath = snapshot.data;
+      if (localPath != null && localPath.isNotEmpty) {
+        final f = File(localPath);
+        if (f.existsSync()) {
+          return Image.file(
+            f,
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            errorBuilder: (_, _, _) => _cameraImageFallback(accentColor),
+          );
+        }
+      }
+      return _cameraImageFallback(accentColor);
+    },
+  );
 }
 
 Widget _cameraImageFallback(Color accentColor) {

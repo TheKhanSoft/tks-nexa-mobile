@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/biometric_photo_crop_helper.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/tflite_face_verification_service.dart';
+import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/account/domain/employee_profile.dart';
 import 'package:tks_nexa_attendance/features/auth/application/auth_providers.dart';
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
@@ -57,19 +59,27 @@ class PhotoUploadController extends AsyncNotifier<String?> {
   Future<String?> uploadPhoto({
     Uint8List? photoBytes,
     String? photoBase64,
+    FaceBounds? faceBounds,
   }) async {
     state = const AsyncLoading();
     try {
+      Uint8List? uploadBytes = photoBytes;
+      if (uploadBytes != null) {
+        uploadBytes = await BiometricPhotoCropHelper.cropToStandardPortrait(
+          uploadBytes,
+          bounds: faceBounds,
+        );
+      }
       List<double>? embedding;
-      if (photoBytes != null) {
+      if (uploadBytes != null) {
         try {
-          embedding = await TfliteFaceVerificationService.extractEmbeddingFromBytes(photoBytes);
+          embedding = await TfliteFaceVerificationService.extractEmbeddingFromBytes(uploadBytes);
         } catch (_) {}
       }
       final photoUrl = await ref
           .read(employeeAccountApiProvider)
           .uploadProfilePhoto(
-            photoBytes: photoBytes,
+            photoBytes: uploadBytes,
             photoBase64: photoBase64,
             embedding: embedding,
           );

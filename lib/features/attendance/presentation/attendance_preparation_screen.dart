@@ -152,7 +152,10 @@ class _AttendancePreparationScreenState
     try {
       final photoUrl = await ref
           .read(photoUploadControllerProvider.notifier)
-          .uploadPhoto(photoBytes: capture.bytes);
+          .uploadPhoto(
+            photoBytes: capture.bytes,
+            faceBounds: capture.faceBounds,
+          );
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
 
       if (!mounted) return;

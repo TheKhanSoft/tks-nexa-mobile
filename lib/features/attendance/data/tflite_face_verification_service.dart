@@ -35,10 +35,13 @@ class TfliteFaceVerificationService implements FaceVerificationService {
       );
     }
 
-    final decoded = image.decodeImage(capture.bytes);
+    final faceBytes = capture.croppedFaceBytes ?? capture.bytes;
+    final decoded = image.decodeImage(faceBytes);
     if (decoded == null) throw const FormatException('Invalid face image.');
     final oriented = image.bakeOrientation(decoded);
-    final cropped = _cropFace(oriented, capture.faceBounds);
+    final cropped = capture.croppedFaceBytes != null
+        ? oriented
+        : _cropFace(oriented, capture.faceBounds);
 
     Interpreter? interpreter;
     List<double> liveEmbedding;
