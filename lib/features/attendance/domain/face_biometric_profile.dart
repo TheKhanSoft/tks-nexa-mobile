@@ -5,9 +5,13 @@ class FaceBiometricProfile {
     required this.matchThreshold,
     required this.modelVersion,
     required this.livenessRequired,
+    this.photoUrl,
   }) : embedding = List<double>.unmodifiable(embedding) {
     if (employeeId.trim().isEmpty ||
-        embedding.length != 512 ||
+        (embedding.isNotEmpty &&
+            embedding.length != 512 &&
+            embedding.length != 192 &&
+            embedding.length != 128) ||
         embedding.any((value) => !value.isFinite) ||
         !matchThreshold.isFinite ||
         matchThreshold <= 0 ||
@@ -22,6 +26,7 @@ class FaceBiometricProfile {
   final double matchThreshold;
   final String modelVersion;
   final bool livenessRequired;
+  final String? photoUrl;
 }
 
 class LocalFaceVerification {

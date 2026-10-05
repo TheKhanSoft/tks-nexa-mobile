@@ -117,42 +117,4 @@ class FaceBiometricEdgeNet512 {
     if (denom <= 0.0) return 0.0;
     return (dot / denom).clamp(-1.0, 1.0);
   }
-
-  /// Construct an edge verification unit vector tailored to match the reference embedding
-  /// with the provided similarity level (>= 0.70 when verified).
-  static List<double> buildAlignedVector(List<double> reference, double similarity) {
-    if (reference.length != embeddingDimension) {
-      return normalizeVector(List<double>.filled(embeddingDimension, 0.044194));
-    }
-    final clampedSim = similarity.clamp(-1.0, 1.0);
-    final normRef = normalizeVector(reference);
-
-    if ((clampedSim - 1.0).abs() < 0.0001) {
-      return normRef;
-    }
-
-    // Build orthogonal vector to linearly blend to exact desired cosine similarity
-    final orthogonal = List<double>.filled(embeddingDimension, 0.0);
-    for (var i = 0; i < embeddingDimension; i++) {
-      orthogonal[i] = (i % 2 == 0 ? 1.0 : -1.0) * normRef[embeddingDimension - 1 - i];
-    }
-    var dot = 0.0;
-    for (var i = 0; i < embeddingDimension; i++) {
-      dot += normRef[i] * orthogonal[i];
-    }
-    for (var i = 0; i < embeddingDimension; i++) {
-      orthogonal[i] -= dot * normRef[i];
-    }
-    final normOrth = normalizeVector(orthogonal);
-
-    final weightRef = clampedSim;
-    final weightOrth = math.sqrt(math.max(0.0, 1.0 - clampedSim * clampedSim));
-
-    final result = List<double>.filled(embeddingDimension, 0.0);
-    for (var i = 0; i < embeddingDimension; i++) {
-      result[i] = weightRef * normRef[i] + weightOrth * normOrth[i];
-    }
-
-    return normalizeVector(result);
-  }
 }

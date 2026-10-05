@@ -31,13 +31,17 @@ class FaceBiometricProfileDto {
         );
       }
 
+      final photoUrl = data['photo_url'] ?? data['master_photo_url'] ?? data['picture_url'];
       final rawEmbedding =
           data['embedding'] ??
               data['embedding_vector'] ??
               data['face_embedding'] ??
               data['reference_embedding'];
 
-      if (rawEmbedding == null || (rawEmbedding is List && rawEmbedding.isEmpty)) {
+      final hasEmbedding = rawEmbedding != null && (rawEmbedding is! List || rawEmbedding.isNotEmpty);
+      final hasPhoto = photoUrl != null && photoUrl.toString().trim().isNotEmpty;
+
+      if (!hasEmbedding && !hasPhoto) {
         throw const AppFailure(
           code: FailureCode.invalidInput,
           message: 'No face biometric is enrolled for this employee. Please enroll your face first.',
@@ -55,12 +59,13 @@ class FaceBiometricProfileDto {
       return FaceBiometricProfile(
         employeeId: employeeId.toString().trim(),
         embedding: _embedding(rawEmbedding),
-        matchThreshold: threshold is num ? threshold.toDouble() : 0.78,
+        matchThreshold: threshold is num ? threshold.toDouble() : 0.70,
         modelVersion: modelVersion is String && modelVersion.trim().isNotEmpty
             ? modelVersion.trim()
             : 'Face Biometric (v1.0)',
         livenessRequired:
-        (data['liveness_required'] ?? data['require_liveness']) != false,
+            (data['liveness_required'] ?? data['require_liveness']) != false,
+        photoUrl: photoUrl?.toString().trim(),
       );
     } on AppFailure {
       rethrow;
@@ -75,18 +80,18 @@ class FaceBiometricProfileDto {
 
   static List<double> _embedding(Object? value) {
     if (value == null) {
-      return List<double>.filled(512, 0.05);
+      return const <double>[];
     }
     Object? decoded = value;
     if (value is String) {
       try {
         decoded = jsonDecode(value);
       } catch (_) {
-        return List<double>.filled(512, 0.05);
+        return const <double>[];
       }
     }
     if (decoded is! List || decoded.isEmpty) {
-      return List<double>.filled(512, 0.05);
+      return const <double>[];
     }
     return decoded
         .map((item) {

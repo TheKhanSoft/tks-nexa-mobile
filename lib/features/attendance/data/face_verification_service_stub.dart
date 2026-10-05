@@ -3,7 +3,11 @@ import 'package:tks_nexa_attendance/features/attendance/domain/face_biometric_pr
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_verification_service.dart';
 
-FaceVerificationService createFaceVerificationService() =>
+typedef PhotoDownloader = Future<dynamic> Function(String url);
+
+FaceVerificationService createFaceVerificationService({
+  PhotoDownloader? photoDownloader,
+}) =>
     const UnsupportedFaceVerificationService();
 
 class UnsupportedFaceVerificationService implements FaceVerificationService {

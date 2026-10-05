@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
@@ -55,7 +57,39 @@ final mobileAttendanceApiProvider = Provider<MobileAttendanceApi>((ref) {
 });
 
 final faceVerificationServiceProvider = Provider<FaceVerificationService>(
-  (ref) => createFaceVerificationService(),
+  (ref) {
+    final organization = ref.watch(organizationSessionProvider).value;
+    final session = ref.watch(currentAuthSessionProvider);
+    Dio? client;
+    if (organization != null) {
+      client = DioFactory.createTenantClient(
+        ref.watch(appConfigProvider),
+        organization.apiBaseUri,
+      );
+    }
+    return createFaceVerificationService(
+      photoDownloader: (url) async {
+        try {
+          final dio = client ?? Dio();
+          final headers = <String, dynamic>{};
+          if (session != null) {
+            headers['Authorization'] = 'Bearer ${session.accessToken}';
+          }
+          final res = await dio.get<List<int>>(
+            url,
+            options: Options(
+              responseType: ResponseType.bytes,
+              headers: headers,
+            ),
+          );
+          if (res.data != null) return Uint8List.fromList(res.data!);
+          return null;
+        } catch (_) {
+          return null;
+        }
+      },
+    );
+  },
 );
 
 final deviceSecurityServiceProvider = Provider<DeviceSecurityService>(
@@ -168,6 +202,14 @@ class AttendanceSubmissionController
           code: FailureCode.invalidInput,
           message: 'Liveness challenge failed. Please blink or smile at the camera.',
           diagnosticCode: 'LIVENESS_FAILED',
+        );
+      }
+      if (!verification.matched) {
+        throw AppFailure(
+          code: FailureCode.invalidInput,
+          message:
+              'Facial similarity score (${(verification.similarity * 100).toStringAsFixed(1)}%) is below the required 70.0% matching threshold.',
+          diagnosticCode: 'CONFIDENCE_BELOW_THRESHOLD',
         );
       }
       final organization = ref.read(organizationSessionProvider).value;
