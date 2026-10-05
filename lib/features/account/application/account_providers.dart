@@ -34,6 +34,7 @@ class ChangePasswordController extends AsyncNotifier<void> {
           );
       ref.read(currentAuthSessionProvider.notifier).updateAfterPasswordChanged();
       ref.invalidate(employeeProfileProvider);
+      unawaited(ref.refresh(employeeProfileProvider.future).catchError((_) => null as dynamic));
       state = const AsyncData(null);
       return true;
     } on Object catch (error, stackTrace) {

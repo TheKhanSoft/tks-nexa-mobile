@@ -28,7 +28,8 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
   FaceCaptureEvidence? _capture;
-  String? _error;
+  String? _cameraError;
+  String? _validationError;
   bool _capturing = false;
   bool _returnedCapture = false;
   late final FaceObservationService _faceObserver;
@@ -44,47 +45,69 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
   }
 
   Future<void> _initializeCamera() async {
-    setState(() => _error = null);
-    try {
-      final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        throw CameraException('camera_missing', 'No camera was found.');
-      }
-      final selected = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
-      );
-      final controller = CameraController(
-        selected,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-      await controller.initialize();
-      if (!mounted) {
-        await controller.dispose();
+    setState(() {
+      _cameraError = null;
+      _validationError = null;
+    });
+
+    final previousController = _controller;
+    _controller = null;
+    if (previousController != null) {
+      try {
+        await previousController.dispose();
+      } catch (_) {}
+    }
+
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      try {
+        final cameras = await availableCameras();
+        if (cameras.isEmpty) {
+          throw CameraException('camera_missing', 'No camera was found.');
+        }
+        final selected = cameras.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.front,
+          orElse: () => cameras.first,
+        );
+        final controller = CameraController(
+          selected,
+          ResolutionPreset.medium,
+          enableAudio: false,
+        );
+        await controller.initialize();
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        setState(() => _controller = controller);
+        return;
+      } on CameraException catch (error) {
+        if (attempt == 1 &&
+            (error.code == 'camera_in_use' ||
+                error.code == 'CameraAccessDeniedWithoutPrompt')) {
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          continue;
+        }
+        if (!mounted) return;
+        setState(() => _cameraError = _cameraMessage(error));
+        return;
+      } on Object {
+        if (!mounted) return;
+        setState(
+          () => _cameraError =
+              'The camera could not be opened. Check device permissions.',
+        );
         return;
       }
-      await _controller?.dispose();
-      setState(() => _controller = controller);
-    } on CameraException catch (error) {
-      if (!mounted) return;
-      setState(() => _error = _cameraMessage(error));
-    } on Object {
-      if (!mounted) return;
-      setState(
-        () => _error =
-            'The camera could not be opened. Check device permissions.',
-      );
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
-    if (state == AppLifecycleState.inactive) {
-      controller.dispose();
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      final controller = _controller;
       _controller = null;
+      controller?.dispose();
     } else if (state == AppLifecycleState.resumed) {
       _initializeCamera();
     }
@@ -98,7 +121,10 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
     if (controller == null || !controller.value.isInitialized || _capturing) {
       return;
     }
-    setState(() => _capturing = true);
+    setState(() {
+      _capturing = true;
+      _validationError = null;
+    });
     String? temporaryPath;
     try {
       final file = await controller.takePicture();
@@ -130,13 +156,26 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
         );
       });
     } on AppFailure catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _validationError = error.message);
+      try {
+        if (controller.value.isInitialized) {
+          await controller.resumePreview();
+        }
+      } catch (_) {}
     } on CameraException catch (error) {
-      if (mounted) setState(() => _error = _cameraMessage(error));
+      if (mounted) setState(() => _cameraError = _cameraMessage(error));
     } on Object {
       if (mounted) {
-        setState(() => _error = 'The face photo could not be captured.');
+        setState(
+          () => _validationError =
+              'The face photo could not be captured. Please position your face and try again.',
+        );
       }
+      try {
+        if (controller.value.isInitialized) {
+          await controller.resumePreview();
+        }
+      } catch (_) {}
     } finally {
       if (temporaryPath != null) {
         await deleteTemporaryCapture(temporaryPath);
@@ -170,7 +209,8 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
     _discardCapture(_capture);
     setState(() {
       _capture = null;
-      _error = null;
+      _validationError = null;
+      _cameraError = null;
     });
     try {
       if (_controller != null && _controller!.value.isInitialized) {
@@ -193,7 +233,9 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
+    final controller = _controller;
+    _controller = null;
+    controller?.dispose();
     unawaited(_faceObserver.dispose());
     if (!_returnedCapture) _discardCapture(_capture);
     super.dispose();
@@ -273,7 +315,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
                           Image.memory(capture.bytes, fit: BoxFit.cover)
                         else
                           _cameraPreview(),
-                        if (capture == null && _error == null)
+                        if (capture == null && _cameraError == null)
                           const _FaceGuideOverlay(),
                       ],
                     ),
@@ -287,21 +329,38 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
               padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
               child: Column(
                 children: [
-                  if (_error case final error?) ...[
+                  if (_validationError case final error?) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                          horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        error,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xFFFFB4BC),
-                          fontWeight: FontWeight.w600,
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.4),
                         ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            color: Color(0xFFFFB4BC),
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              error,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFFFFB4BC),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -311,7 +370,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (_error != null)
+                        if (_cameraError != null)
                           OutlinedButton.icon(
                             onPressed: _initializeCamera,
                             style: OutlinedButton.styleFrom(
@@ -321,7 +380,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
                                   horizontal: 24, vertical: 12),
                             ),
                             icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('Try Again'),
+                            label: const Text('Restart Camera'),
                           )
                         else
                           // Large prominent single-tap capture button
@@ -398,16 +457,30 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
   }
 
   Widget _cameraPreview() {
-    final controller = _controller;
-    if (_error != null) {
-      return const Center(
-        child: Icon(
-          Icons.no_photography_outlined,
-          color: Colors.white54,
-          size: 58,
+    if (_cameraError case final error?) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.no_photography_outlined,
+                color: Colors.white54,
+                size: 58,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                error,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
         ),
       );
     }
+    final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.white),

@@ -56,6 +56,66 @@ class EmployeeProfile {
   final List<String> attendanceReasons;
   final EmployeeShiftProfile? assignedShift;
   final EmployeeSecurityProfile security;
+
+  EmployeeProfile copyWith({
+    String? name,
+    String? email,
+    String? employeeCode,
+    String? fatherName,
+    String? cnic,
+    String? designation,
+    String? office,
+    String? campus,
+    String? mobileNumber,
+    String? gender,
+    bool? isActive,
+    bool? faceEnrolled,
+    String? photoUrl,
+    String? username,
+    String? dateOfBirth,
+    String? address,
+    String? city,
+    String? province,
+    String? postalCode,
+    String? designationGrade,
+    String? department,
+    String? reportingTo,
+    bool? mustChangePassword,
+    bool? canMarkAttendance,
+    List<String>? attendanceReasons,
+    EmployeeShiftProfile? assignedShift,
+    EmployeeSecurityProfile? security,
+  }) {
+    return EmployeeProfile(
+      name: name ?? this.name,
+      email: email ?? this.email,
+      employeeCode: employeeCode ?? this.employeeCode,
+      fatherName: fatherName ?? this.fatherName,
+      cnic: cnic ?? this.cnic,
+      designation: designation ?? this.designation,
+      office: office ?? this.office,
+      campus: campus ?? this.campus,
+      mobileNumber: mobileNumber ?? this.mobileNumber,
+      gender: gender ?? this.gender,
+      isActive: isActive ?? this.isActive,
+      faceEnrolled: faceEnrolled ?? this.faceEnrolled,
+      photoUrl: photoUrl ?? this.photoUrl,
+      username: username ?? this.username,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      address: address ?? this.address,
+      city: city ?? this.city,
+      province: province ?? this.province,
+      postalCode: postalCode ?? this.postalCode,
+      designationGrade: designationGrade ?? this.designationGrade,
+      department: department ?? this.department,
+      reportingTo: reportingTo ?? this.reportingTo,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      canMarkAttendance: canMarkAttendance ?? this.canMarkAttendance,
+      attendanceReasons: attendanceReasons ?? this.attendanceReasons,
+      assignedShift: assignedShift ?? this.assignedShift,
+      security: security ?? this.security,
+    );
+  }
 }
 
 class EmployeeSecurityProfile {

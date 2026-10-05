@@ -55,10 +55,7 @@ class CurrentAuthSessionController extends Notifier<AuthSession?> {
   void updateAfterPasswordChanged() {
     final current = state;
     if (current != null) {
-      final updated = current.copyWith(
-        mustChangePassword: false,
-        actionRequired: current.actionRequired == 'change_password' ? null : current.actionRequired,
-      );
+      final updated = current.clearPasswordChangeRequirement();
       state = updated;
       _persistSession(updated);
     }

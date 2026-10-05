@@ -46,7 +46,7 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
     final profile = ref.read(employeeProfileProvider).value;
 
     final isTempPassword = (session?.mustChangePassword == true) ||
-        (profile?.mustChangePassword == true) ||
+        (profile?.mustChangePassword == true && session?.mustChangePassword != false) ||
         (session?.actionRequired == 'change_password');
 
     if (isTempPassword) {
@@ -79,7 +79,7 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
     final profile = ref.read(employeeProfileProvider).value;
 
     final isTempPassword = (session?.mustChangePassword == true) ||
-        (profile?.mustChangePassword == true) ||
+        (profile?.mustChangePassword == true && session?.mustChangePassword != false) ||
         (session?.actionRequired == 'change_password');
 
     if (isTempPassword) {
@@ -122,9 +122,12 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
           FilledButton.icon(
             icon: const Icon(Icons.lock_reset_rounded),
             label: const Text('Change Password Now'),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(dialogContext).pop();
-              context.push(AppRoutes.changePassword);
+              await context.push(AppRoutes.changePassword);
+              if (mounted) {
+                ref.invalidate(employeeProfileProvider);
+              }
             },
           ),
         ],
@@ -1127,7 +1130,6 @@ class _RecentDayItem {
     required this.icon,
     required this.subtitle,
     required this.timeRange,
-    this.capturedPhotoUrl,
   });
 
   final DateTime date;
@@ -1136,7 +1138,6 @@ class _RecentDayItem {
   final IconData icon;
   final String subtitle;
   final String timeRange;
-  final String? capturedPhotoUrl;
 }
 
 class _RecentDayCard extends StatelessWidget {

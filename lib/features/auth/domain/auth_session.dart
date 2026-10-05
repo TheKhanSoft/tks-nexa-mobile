@@ -25,6 +25,21 @@ class AuthSession {
   final String? photoWarningMessage;
   final String? redirectTarget;
 
+  AuthSession clearPasswordChangeRequirement() {
+    return AuthSession(
+      accessToken: accessToken,
+      employeeName: employeeName,
+      photoUrl: photoUrl,
+      mustChangePassword: false,
+      hasPhoto: hasPhoto,
+      actionRequired: actionRequired == 'change_password' ? null : actionRequired,
+      actionMessage: actionRequired == 'change_password' ? null : actionMessage,
+      passwordChangeMessage: null,
+      photoWarningMessage: photoWarningMessage,
+      redirectTarget: redirectTarget == 'change_password' ? null : redirectTarget,
+    );
+  }
+
   AuthSession copyWith({
     String? accessToken,
     String? employeeName,

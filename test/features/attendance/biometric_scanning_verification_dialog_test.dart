@@ -8,7 +8,6 @@ import 'package:tks_nexa_attendance/features/attendance/application/mobile_atten
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_mark.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/location_evidence.dart';
-import 'package:tks_nexa_attendance/features/attendance/domain/mobile_attendance_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/biometric_scanning_verification_dialog.dart';
 
 // 1x1 transparent PNG bytes for mock image
