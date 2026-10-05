@@ -182,10 +182,10 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.memory_rounded, color: theme.colorScheme.primary, size: 24),
+                          Icon(Icons.face_retouching_natural_rounded, color: theme.colorScheme.primary, size: 24),
                           const SizedBox(width: 10),
                           Text(
-                            'FaceBiometric-EdgeNet-512',
+                            'Facial Biometric Verification',
                             style: TextStyle(
                               color: theme.colorScheme.primary,
                               fontWeight: FontWeight.w900,
@@ -196,7 +196,7 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '512-D Float32 Unit Vector (|v|=1.0) · Cosine Threshold ≥ 0.70 (70% Match)',
+                        'Secure On-Device Face Matching · Live Anti-Spoof Protection',
                         style: theme.textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
@@ -218,7 +218,7 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: logs.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 14),
+                  separatorBuilder: (_, _) => const SizedBox(height: 14),
                   itemBuilder: (context, index) {
                     final log = logs[index];
                     final isPass = log.matchScore >= log.threshold;

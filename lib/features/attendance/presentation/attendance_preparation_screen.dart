@@ -582,7 +582,7 @@ class _BiometricReadinessCard extends StatelessWidget {
       AsyncData() => (
         Icons.verified_user_rounded,
         'Face Profile Ready',
-        'Protected 512-value biometric profile active.',
+        'Face profile enrolled and ready.',
         AppPalette.emerald,
       ),
       AsyncError(:final error) => (

@@ -128,7 +128,7 @@ class TfliteFaceVerificationService implements FaceVerificationService {
         livenessPassed:
             !enrolledProfile.livenessRequired || capture.livenessPassed,
         challenge: capture.livenessChallenge,
-        modelVersion: 'FaceBiometric-EdgeNet-512 (v1.0.0)',
+        modelVersion: 'Face Biometric (v1.0)',
         liveVector: finalVector,
       );
     } on AppFailure {

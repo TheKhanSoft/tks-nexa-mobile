@@ -49,7 +49,7 @@ class AttendanceMarkRequest {
     return {
       'challenge_id': challengeId,
       'verified_method': 'face_biometric',
-      'verification_method': 'FaceBiometric-EdgeNet-512',
+      'verification_method': 'Face Biometric',
       'confidence_score': clampedScore,
       'similarity_score': clampedScore,
       'match_threshold': 0.70,
@@ -58,7 +58,7 @@ class AttendanceMarkRequest {
       'liveness_passed': verification.livenessPassed,
       'liveness_verified': verification.livenessPassed,
       'liveness_challenge': verification.challenge,
-      'face_model_version': 'FaceBiometric-EdgeNet-512 (v1.0.0)',
+      'face_model_version': 'Face Biometric (v1.0)',
       'timestamp': capturedAt.toIso8601String(),
       'device_id': deviceId,
       if (deviceModel != null) 'device_model': deviceModel!,
@@ -89,7 +89,7 @@ class AttendanceMarkRequest {
       'biometrics': <String, Object>{
         'similarity_score': clampedScore,
         'liveness_verified': verification.livenessPassed,
-        'verification_method': 'FaceBiometric-EdgeNet-512',
+        'verification_method': 'Face Biometric',
       },
     };
   }

@@ -58,7 +58,7 @@ class FaceBiometricProfileDto {
         matchThreshold: threshold is num ? threshold.toDouble() : 0.78,
         modelVersion: modelVersion is String && modelVersion.trim().isNotEmpty
             ? modelVersion.trim()
-            : 'mobile_facenet_512',
+            : 'Face Biometric (v1.0)',
         livenessRequired:
         (data['liveness_required'] ?? data['require_liveness']) != false,
       );

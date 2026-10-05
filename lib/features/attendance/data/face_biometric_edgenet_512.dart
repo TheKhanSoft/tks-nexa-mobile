@@ -12,8 +12,8 @@ import 'package:crypto/crypto.dart';
 class FaceBiometricEdgeNet512 {
   const FaceBiometricEdgeNet512._();
 
-  static const String modelName = 'FaceBiometric-EdgeNet-512';
-  static const String modelVersion = 'v1.0.0';
+  static const String modelName = 'Face Biometric';
+  static const String modelVersion = 'v1.0';
   static const int embeddingDimension = 512;
   static const double matchThreshold = 0.70;
 
