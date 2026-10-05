@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/face_biometric_profile_dto.dart';
-import 'package:tks_nexa_attendance/features/attendance/domain/face_biometric_profile.dart';
 
 void main() {
   group('FaceBiometricProfileDto', () {

@@ -174,16 +174,27 @@ class EmployeeAccountApi {
   Future<String> uploadProfilePhoto({
     Uint8List? photoBytes,
     String? photoBase64,
+    List<double>? embedding,
     String fileName = 'face_photo.jpg',
   }) async {
     try {
       dynamic payload;
       if (photoBytes != null) {
-        payload = FormData.fromMap({
+        final map = <String, dynamic>{
           'photo': MultipartFile.fromBytes(photoBytes, filename: fileName),
-        });
+        };
+        if (embedding != null && embedding.isNotEmpty) {
+          map['embedding'] = embedding;
+          map['face_vector'] = embedding;
+        }
+        payload = FormData.fromMap(map);
       } else if (photoBase64 != null && photoBase64.isNotEmpty) {
-        payload = {'photo_base64': photoBase64};
+        final map = <String, dynamic>{'photo_base64': photoBase64};
+        if (embedding != null && embedding.isNotEmpty) {
+          map['embedding'] = embedding;
+          map['face_vector'] = embedding;
+        }
+        payload = map;
       } else {
         throw const AppFailure(
           code: FailureCode.invalidInput,

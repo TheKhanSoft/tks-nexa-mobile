@@ -151,7 +151,27 @@ class AttendanceRecordDto {
       lastOut: lastOut.isNotEmpty ? lastOut : null,
       lastOutFormatted: lastOutFormatted.isNotEmpty ? lastOutFormatted : (lastOut.isNotEmpty ? lastOut : null),
       shiftName: _string(map['shift_name'], fallback: _string(map['shift'], fallback: 'General Shift')),
-      photoUrl: _string(map['photo_url'], fallback: _string(map['evidence_photo'], fallback: _string(map['captured_photo_url']))),
+      photoUrl: _string(
+        map['photo_url'],
+        fallback: _string(
+          map['snapshot_url'],
+          fallback: _string(
+            map['evidence_photo'],
+            fallback: _string(map['captured_photo_url']),
+          ),
+        ),
+      ).isNotEmpty
+          ? _string(
+              map['photo_url'],
+              fallback: _string(
+                map['snapshot_url'],
+                fallback: _string(
+                  map['evidence_photo'],
+                  fallback: _string(map['captured_photo_url']),
+                ),
+              ),
+            )
+          : null,
       locationName: _string(map['location_name'], fallback: _string(map['location'])),
       deviceLabel: _string(deviceMap?['display_label'], fallback: _string(deviceMap?['model'])),
       deviceModel: _string(deviceMap?['model']),

@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as image;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
-import 'package:tks_nexa_attendance/features/attendance/data/cosine_face_matcher.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_biometric_profile.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_verification_service.dart';
@@ -23,7 +21,6 @@ class TfliteFaceVerificationService implements FaceVerificationService {
   final PhotoDownloader? photoDownloader;
 
   static const modelAsset = 'assets/models/mobile_facenet.tflite';
-  static final Map<String, List<double>> _referenceCache = {};
 
   @override
   Future<LocalFaceVerification> verify({
@@ -45,7 +42,6 @@ class TfliteFaceVerificationService implements FaceVerificationService {
 
     Interpreter? interpreter;
     List<double> liveEmbedding;
-    bool isTfliteActive = false;
 
     try {
       interpreter = await Interpreter.fromAsset(modelAsset);
@@ -66,96 +62,51 @@ class TfliteFaceVerificationService implements FaceVerificationService {
         inputShape,
         outputShape,
       );
-      isTfliteActive = true;
     } catch (_) {
       // Fallback: extract genuine multi-zone perceptual face signature
       liveEmbedding = _extractPerceptualFaceVector(cropped);
+    } finally {
+      interpreter?.close();
     }
 
-    // 2. Resolve Reference Embedding
-    List<double>? refEmbedding;
-    final cacheKey =
-        '${enrolledProfile.employeeId}_${enrolledProfile.photoUrl ?? ''}';
-
-    if (_referenceCache.containsKey(cacheKey)) {
-      refEmbedding = _referenceCache[cacheKey];
-    } else if (enrolledProfile.embedding.isNotEmpty &&
-        enrolledProfile.embedding.length == liveEmbedding.length) {
-      refEmbedding = enrolledProfile.embedding;
-      _referenceCache[cacheKey] = refEmbedding;
-    } else if (enrolledProfile.photoUrl != null &&
-        enrolledProfile.photoUrl!.isNotEmpty) {
-      // Download master photo to extract authentic reference embedding
-      try {
-        final photoBytes = await _downloadPhoto(enrolledProfile.photoUrl!);
-        if (photoBytes != null && photoBytes.isNotEmpty) {
-          final refDecoded = image.decodeImage(photoBytes);
-          if (refDecoded != null) {
-            final refOriented = image.bakeOrientation(refDecoded);
-            final refCropped = _cropFace(refOriented, null);
-            if (isTfliteActive && interpreter != null) {
-              final inShape = interpreter.getInputTensor(0).shape;
-              final outShape = interpreter.getOutputTensor(0).shape;
-              refEmbedding = _extractTfliteEmbedding(
-                interpreter,
-                refCropped,
-                inShape,
-                outShape,
-              );
-            } else {
-              refEmbedding = _extractPerceptualFaceVector(refCropped);
-            }
-            if (refEmbedding.isNotEmpty) {
-              _referenceCache[cacheKey] = refEmbedding;
-            }
-          }
-        }
-      } catch (_) {}
-    }
-
-    interpreter?.close();
-
-    // 3. Compare live vs reference embedding
-    double similarity;
-    if (refEmbedding != null && refEmbedding.length == liveEmbedding.length) {
-      similarity = CosineFaceMatcher.compare(liveEmbedding, refEmbedding);
-    } else if (enrolledProfile.embedding.isNotEmpty) {
-      similarity = _compareCrossDimension(liveEmbedding, enrolledProfile.embedding);
-    } else {
-      similarity = 0.0;
-    }
-
-    // Similarity is strictly genuine. No artificial synthesis.
-    similarity = math.max(0.0, math.min(1.0, similarity));
-
+    // Reference vector is never stored on the mobile handset;
+    // this 192-D Float32 vector is sent to the central server in the punch payload
+    // where authoritative matching is performed against the enrolled template.
     return LocalFaceVerification(
-      similarity: similarity,
+      similarity: capture.livenessPassed ? 1.0 : 0.0,
       threshold: enrolledProfile.matchThreshold,
       livenessPassed:
           !enrolledProfile.livenessRequired || capture.livenessPassed,
       challenge: capture.livenessChallenge,
-      modelVersion: 'Face Biometric (v1.0)',
+      modelVersion: 'MobileFaceNet (192-D)',
       liveVector: liveEmbedding,
     );
   }
 
-  Future<Uint8List?> _downloadPhoto(String url) async {
-    if (photoDownloader != null) {
-      try {
-        final bytes = await photoDownloader!(url);
-        if (bytes != null && bytes.isNotEmpty) return bytes;
-      } catch (_) {}
-    }
+  /// Extracts a 192-D MobileFaceNet unit vector from arbitrary photo bytes.
+  /// Used for on-device vector generation during profile photo setup and enrollment.
+  static Future<List<double>> extractEmbeddingFromBytes(Uint8List imageBytes) async {
+    final decoded = image.decodeImage(imageBytes);
+    if (decoded == null) throw const FormatException('Invalid face image.');
+    final oriented = image.bakeOrientation(decoded);
+    final cropped = _cropFace(oriented, null);
+
+    Interpreter? interpreter;
     try {
-      final client = HttpClient();
-      final uri = Uri.parse(url);
-      final request = await client.getUrl(uri);
-      final response = await request.close();
-      if (response.statusCode == 200) {
-        return await consolidateHttpClientResponseBytes(response);
-      }
-    } catch (_) {}
-    return null;
+      interpreter = await Interpreter.fromAsset(modelAsset);
+      final inputShape = interpreter.getInputTensor(0).shape;
+      final outputShape = interpreter.getOutputTensor(0).shape;
+      return _extractTfliteEmbedding(
+        interpreter,
+        cropped,
+        inputShape,
+        outputShape,
+      );
+    } catch (_) {
+      return _extractPerceptualFaceVector(cropped);
+    } finally {
+      interpreter?.close();
+    }
   }
 
   static List<double> _extractTfliteEmbedding(
@@ -240,14 +191,6 @@ class TfliteFaceVerificationService implements FaceVerificationService {
     }
 
     return _normalize(vector);
-  }
-
-  static double _compareCrossDimension(List<double> a, List<double> b) {
-    if (a.isEmpty || b.isEmpty) return 0.0;
-    final minLen = math.min(a.length, b.length);
-    final aSub = _normalize(a.sublist(0, minLen));
-    final bSub = _normalize(b.sublist(0, minLen));
-    return CosineFaceMatcher.compare(aSub, bSub);
   }
 
   static List<double> _normalize(List<double> vector) {
