@@ -1702,6 +1702,27 @@ Widget _buildLocalSelfieOrFallback(WidgetRef ref, DateTime date, Color accentCol
   );
 }
 
+void _showPhotoLockedDialog(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      icon: const Icon(Icons.lock_rounded, color: Color(0xFF10B981), size: 36),
+      title: const Text('Face Photo Locked', style: TextStyle(fontWeight: FontWeight.bold)),
+      content: const Text(
+        'Your facial biometric photo is registered and locked. '
+        'To prevent unauthorized modifications, employees cannot change their profile photo. '
+        'If you need to update your picture, please contact your organization administrator.',
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Understood'),
+        ),
+      ],
+    ),
+  );
+}
+
 Widget _cameraImageFallback(Color accentColor) {
   return Container(
     decoration: BoxDecoration(
@@ -2370,14 +2391,27 @@ class _ProfilePage extends ConsumerWidget {
                         : () => context.push(AppRoutes.personalInformation),
                   ),
                   const Divider(height: 1, indent: 68),
-                  _ProfileTile(
-                    icon: Icons.camera_alt_rounded,
-                    title: (profileState.value?.photoUrl?.isNotEmpty ?? false)
-                        ? 'Update face photo'
-                        : 'Upload face photo',
-                    subtitle: 'Capture clear face photo for biometric verification',
-                    accent: Colors.teal,
-                    onTap: onUploadPhoto,
+                  Builder(
+                    builder: (context) {
+                      final hasPhoto = profileState.value?.photoUrl?.isNotEmpty ?? false;
+                      return _ProfileTile(
+                        icon: hasPhoto
+                            ? Icons.verified_user_rounded
+                            : Icons.camera_alt_rounded,
+                        title: hasPhoto
+                            ? 'Face photo registered'
+                            : 'Upload face photo',
+                        subtitle: hasPhoto
+                            ? 'Biometrics verified & locked (Admin managed)'
+                            : 'Capture clear face photo for biometric verification',
+                        accent: hasPhoto
+                            ? const Color(0xFF10B981)
+                            : Colors.teal,
+                        onTap: hasPhoto
+                            ? () => _showPhotoLockedDialog(context)
+                            : onUploadPhoto,
+                      );
+                    },
                   ),
                   const Divider(height: 1, indent: 68),
                   _ProfileTile(

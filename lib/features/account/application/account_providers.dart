@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/biometric_photo_crop_helper.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/tflite_face_verification_service.dart';
+import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/account/domain/employee_profile.dart';
 import 'package:tks_nexa_attendance/features/auth/application/auth_providers.dart';
@@ -61,6 +62,19 @@ class PhotoUploadController extends AsyncNotifier<String?> {
     String? photoBase64,
     FaceBounds? faceBounds,
   }) async {
+    final existingPhoto = ref.read(employeeProfileProvider).value?.photoUrl;
+    if (existingPhoto != null && existingPhoto.isNotEmpty) {
+      state = AsyncError(
+        const AppFailure(
+          code: FailureCode.invalidInput,
+          message:
+              'Profile picture is already registered and locked. Employees cannot change their photo once set. Please contact your organization administrator.',
+          diagnosticCode: 'PHOTO_ALREADY_EXISTS',
+        ),
+        StackTrace.current,
+      );
+      return null;
+    }
     state = const AsyncLoading();
     try {
       Uint8List? uploadBytes = photoBytes;
