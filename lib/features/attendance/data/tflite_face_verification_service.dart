@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as image;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
@@ -21,6 +22,31 @@ class TfliteFaceVerificationService implements FaceVerificationService {
   final PhotoDownloader? photoDownloader;
 
   static const modelAsset = 'assets/models/mobile_facenet.tflite';
+  static Interpreter? _cachedInterpreter;
+
+  static Future<Interpreter> _getInterpreter() async {
+    if (_cachedInterpreter != null) {
+      return _cachedInterpreter!;
+    }
+    try {
+      _cachedInterpreter = await Interpreter.fromAsset(modelAsset);
+      return _cachedInterpreter!;
+    } catch (e1) {
+      debugPrint('[Biometrics] fromAsset failed: $e1. Trying rootBundle buffer...');
+      try {
+        final byteData = await rootBundle.load(modelAsset);
+        final bytes = byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        );
+        _cachedInterpreter = Interpreter.fromBuffer(bytes);
+        return _cachedInterpreter!;
+      } catch (e2) {
+        debugPrint('[Biometrics] fromBuffer failed: $e2');
+        rethrow;
+      }
+    }
+  }
 
   @override
   Future<LocalFaceVerification> verify({
@@ -43,11 +69,10 @@ class TfliteFaceVerificationService implements FaceVerificationService {
         ? oriented
         : _cropFace(oriented, capture.faceBounds);
 
-    Interpreter? interpreter;
     List<double> liveEmbedding;
 
     try {
-      interpreter = await Interpreter.fromAsset(modelAsset);
+      final interpreter = await _getInterpreter();
       final inputShape = interpreter.getInputTensor(0).shape;
       final outputShape = interpreter.getOutputTensor(0).shape;
       final outputDim = outputShape.fold<int>(1, (total, value) => total * value);
@@ -67,10 +92,11 @@ class TfliteFaceVerificationService implements FaceVerificationService {
       );
     } catch (e) {
       debugPrint('[Biometrics] TFLite inference failed: $e');
-      // Fallback: extract genuine multi-zone perceptual face signature
-      liveEmbedding = _extractPerceptualFaceVector(cropped);
-    } finally {
-      interpreter?.close();
+      throw AppFailure(
+        code: FailureCode.invalidInput,
+        message: 'On-device neural face verification failed: $e. Please verify device permissions and storage.',
+        diagnosticCode: 'MODEL_INFERENCE_FAILED',
+      );
     }
 
     // Reference vector is never stored on the mobile handset;
@@ -95,9 +121,8 @@ class TfliteFaceVerificationService implements FaceVerificationService {
     final oriented = image.bakeOrientation(decoded);
     final cropped = _cropFace(oriented, null);
 
-    Interpreter? interpreter;
     try {
-      interpreter = await Interpreter.fromAsset(modelAsset);
+      final interpreter = await _getInterpreter();
       final inputShape = interpreter.getInputTensor(0).shape;
       final outputShape = interpreter.getOutputTensor(0).shape;
       return _extractTfliteEmbedding(
@@ -106,10 +131,13 @@ class TfliteFaceVerificationService implements FaceVerificationService {
         inputShape,
         outputShape,
       );
-    } catch (_) {
-      return _extractPerceptualFaceVector(cropped);
-    } finally {
-      interpreter?.close();
+    } catch (e) {
+      debugPrint('[Biometrics] extractEmbeddingFromBytes failed: $e');
+      throw AppFailure(
+        code: FailureCode.invalidInput,
+        message: 'Failed to extract biometric vector from photo: $e',
+        diagnosticCode: 'EMBEDDING_EXTRACTION_FAILED',
+      );
     }
   }
 
@@ -145,57 +173,6 @@ class TfliteFaceVerificationService implements FaceVerificationService {
     return _normalize(output.flatten<double>());
   }
 
-  /// Extracts a 192-dimension multi-zone perceptual face descriptor from face pixels.
-  /// Computes zone luminance, color balance, and edge contrast gradients across an 8x8 grid.
-  /// Deterministic, lighting-robust, and produces high similarity (~80-90%) for the same face,
-  /// but low similarity (~20-35%) for different people.
-  static List<double> _extractPerceptualFaceVector(image.Image face) {
-    const dim = 192;
-    final resized = image.copyResize(face, width: 64, height: 64);
-    final vector = List<double>.filled(dim, 0.0);
-
-    var idx = 0;
-    for (var gy = 0; gy < 8; gy++) {
-      for (var gx = 0; gx < 8; gx++) {
-        var sumLum = 0.0;
-        var sumR = 0.0;
-        var sumG = 0.0;
-        var sumB = 0.0;
-        var gradH = 0.0;
-
-        for (var py = 0; py < 8; py++) {
-          for (var px = 0; px < 8; px++) {
-            final x = gx * 8 + px;
-            final y = gy * 8 + py;
-            final p = resized.getPixel(x, y);
-            final lum = 0.299 * p.r + 0.587 * p.g + 0.114 * p.b;
-            sumLum += lum;
-            sumR += p.r;
-            sumG += p.g;
-            sumB += p.b;
-
-            if (px > 0) {
-              final prevP = resized.getPixel(x - 1, y);
-              final prevLum =
-                  0.299 * prevP.r + 0.587 * prevP.g + 0.114 * prevP.b;
-              gradH += (lum - prevLum).abs();
-            }
-          }
-        }
-
-        final cellLum = sumLum / 64.0 / 255.0;
-        final cellColor =
-            (sumG > 0) ? ((sumR + sumB) / (2.0 * sumG + 1e-4)).clamp(0.0, 3.0) / 3.0 : 0.5;
-        final cellGrad = (gradH / 56.0 / 255.0).clamp(0.0, 1.0);
-
-        if (idx < dim) vector[idx++] = cellLum - 0.5;
-        if (idx < dim) vector[idx++] = cellColor - 0.5;
-        if (idx < dim) vector[idx++] = cellGrad - 0.5;
-      }
-    }
-
-    return _normalize(vector);
-  }
 
   static List<double> _normalize(List<double> vector) {
     var sumSq = 0.0;

@@ -7,7 +7,11 @@
 -dontwarn io.flutter.embedding.engine.deferredcomponents.**
 -dontwarn com.google.android.play.core.**
 
-# TensorFlow Lite & ML Kit Keep Rules
+# TensorFlow Lite, LiteRT & ML Kit Keep Rules
+-keep class com.google.ai.edge.litert.** { *; }
+-dontwarn com.google.ai.edge.litert.**
+-keep class org.tensorflow.tflite_flutter.** { *; }
+-dontwarn org.tensorflow.tflite_flutter.**
 -keep class org.tensorflow.lite.** { *; }
 -dontwarn org.tensorflow.lite.**
 -keep class com.google.mlkit.** { *; }
