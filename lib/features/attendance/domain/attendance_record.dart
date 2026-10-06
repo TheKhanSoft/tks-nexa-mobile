@@ -68,12 +68,18 @@ class AttendanceRecord {
       status.toLowerCase().contains('accepted') ||
       status.toLowerCase().contains('matched');
   bool get isLate => status.toLowerCase().contains('late');
+  bool get isHalfDay => status.toLowerCase().contains('half');
   bool get isOnLeave => status.toLowerCase().contains('leave');
   bool get isOfficialDuty => status.toLowerCase().contains('duty');
   bool get isAbsent => status.toLowerCase().contains('absent');
   bool get isOffDay =>
       status.toLowerCase().contains('off') ||
-      status.toLowerCase().contains('holiday');
+      status.toLowerCase().contains('holiday') ||
+      status.toLowerCase().contains('weekend');
+  bool get isFutureOrUpcoming =>
+      status.toLowerCase().contains('upcoming') ||
+      status.toLowerCase().contains('not joined') ||
+      status.toLowerCase().contains('not appointed');
 
   String get formattedNetDuration {
     if (firstIn == null || lastOut == null) {

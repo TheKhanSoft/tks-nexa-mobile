@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,8 +23,9 @@ class AttendanceHistoryScreen extends ConsumerWidget {
 
     return RefreshIndicator(
       onRefresh: () async {
-        ref.invalidate(attendanceHistoryResponseProvider);
-        await ref.read(attendanceHistoryResponseProvider.future);
+        try {
+          final _ = await ref.refresh(attendanceHistoryResponseProvider.future);
+        } catch (_) {}
       },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -273,18 +275,23 @@ class _HistoryContent extends StatelessWidget {
 
 class _HistorySummary {
   _HistorySummary(List<AttendanceRecord> records, [AttendanceSummary? serverSummary])
-      : workingDays = (serverSummary != null && serverSummary.totalWorkingDays > 0)
-            ? serverSummary.totalWorkingDays
-            : records.where((r) => !r.isOffDay && !r.date.isAfter(DateTime.now())).length,
-        presentCount = (serverSummary != null && serverSummary.present > 0)
+      : presentCount = (serverSummary != null && serverSummary.present > 0)
             ? serverSummary.present
-            : records.where((r) => r.isPresent || r.isOfficialDuty).length,
+            : records.where((r) => r.isPresent || r.isLate || r.isHalfDay || r.isOfficialDuty).length,
         lateCount = (serverSummary != null && serverSummary.late > 0)
             ? serverSummary.late
             : records.where((r) => r.isLate).length,
         leaveCount = (serverSummary != null && serverSummary.onLeave > 0)
             ? serverSummary.onLeave
             : records.where((r) => r.isOnLeave).length,
+        workingDays = math.max(
+          (serverSummary != null && serverSummary.totalWorkingDays > 0)
+              ? serverSummary.totalWorkingDays
+              : records.where((r) => !r.isOffDay && !r.isFutureOrUpcoming && !r.date.isAfter(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59))).length,
+          (serverSummary != null && serverSummary.present > 0)
+              ? serverSummary.present
+              : records.where((r) => r.isPresent || r.isLate || r.isHalfDay || r.isOfficialDuty).length,
+        ),
         totalMinutes = records.fold<int>(
           0,
           (sum, r) => sum + _parseMins(r.formattedNetDuration),
@@ -301,8 +308,8 @@ class _HistorySummary {
   final int workedDays;
 
   int get ratePercent => workingDays > 0
-      ? ((presentCount / workingDays) * 100).round()
-      : 100;
+      ? math.min(100, ((presentCount / workingDays) * 100).round())
+      : (presentCount > 0 ? 100 : 0);
 
   /// e.g. "168h 45m" — derived from summing each record's net duration.
   String get productiveLabel =>

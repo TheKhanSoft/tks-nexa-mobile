@@ -89,20 +89,27 @@ class AttendanceRecordDto {
         final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
         for (final r in records) {
           final isPastOrToday = !r.date.isAfter(endOfToday);
-          if (!r.isOffDay && isPastOrToday) {
+          if (!r.isOffDay && !r.isFutureOrUpcoming && isPastOrToday) {
             workDays++;
           }
           if (r.isPresent) {
             p++;
           } else if (r.isLate) {
+            p++;
             l++;
+          } else if (r.isHalfDay) {
+            p++;
           } else if (r.isOnLeave) {
             leave++;
           } else if (r.isOfficialDuty) {
+            p++;
             duty++;
           } else if (r.isAbsent && isPastOrToday) {
             a++;
           }
+        }
+        if (p > workDays) {
+          workDays = p;
         }
         summary = AttendanceSummary(
           totalDays: records.length,

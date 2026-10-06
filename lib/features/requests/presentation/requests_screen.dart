@@ -872,7 +872,12 @@ class _ApplyLeaveBottomSheetState extends ConsumerState<_ApplyLeaveBottomSheet> 
                   value: _selectedLeaveTypeId,
                   decoration: const InputDecoration(labelText: 'Leave Type'),
                   items: types
-                      .map((t) => DropdownMenuItem(value: t.id, child: Text('${t.name} (${t.entitlement.remaining.toStringAsFixed(0)} days left)')))
+                      .map((t) => DropdownMenuItem(
+                            value: t.id,
+                            child: Text(t.showBalance
+                                ? '${t.name} (${t.entitlement.remaining.toStringAsFixed(0)} days left)'
+                                : t.name),
+                          ))
                       .toList(),
                   onChanged: (val) => setState(() => _selectedLeaveTypeId = val),
                   validator: (val) => val == null ? 'Select leave type.' : null,
