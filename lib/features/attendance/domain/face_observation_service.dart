@@ -7,6 +7,8 @@ class FaceObservation {
     this.leftEyeOpenProbability,
     this.rightEyeOpenProbability,
     this.smilingProbability,
+    this.leftEye,
+    this.rightEye,
   });
 
   final FaceBounds bounds;
@@ -14,6 +16,8 @@ class FaceObservation {
   final double? leftEyeOpenProbability;
   final double? rightEyeOpenProbability;
   final double? smilingProbability;
+  final FaceLandmarkPoint? leftEye;
+  final FaceLandmarkPoint? rightEye;
 }
 
 abstract interface class FaceObservationService {

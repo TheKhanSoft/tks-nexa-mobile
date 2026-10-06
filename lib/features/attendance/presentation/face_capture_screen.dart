@@ -149,6 +149,8 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen>
       final croppedFaceBytes = BiometricPhotoCropHelper.cropFaceOnly(
         bytes,
         observation.bounds,
+        eyeA: observation.leftEye,
+        eyeB: observation.rightEye,
       );
       setState(() {
         _capture = FaceCaptureEvidence(

@@ -52,7 +52,7 @@ class AttendanceMarkRequest {
       'verification_method': 'Face Biometric',
       'confidence_score': clampedScore,
       'similarity_score': clampedScore,
-      'match_threshold': 0.70,
+      'match_threshold': verification.threshold,
       if (verification.liveVector != null)
         'face_vector': verification.liveVector!,
       'liveness_passed': verification.livenessPassed,

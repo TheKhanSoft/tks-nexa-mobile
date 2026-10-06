@@ -40,6 +40,26 @@ class MlKitFaceObservationService implements FaceObservationService {
       }
       final face = faces.single;
       final bounds = face.boundingBox;
+
+      final leftEyeLm = face.landmarks[FaceLandmarkType.leftEye];
+      final rightEyeLm = face.landmarks[FaceLandmarkType.rightEye];
+
+      FaceLandmarkPoint? leftEyePoint;
+      if (leftEyeLm != null) {
+        leftEyePoint = FaceLandmarkPoint(
+          x: leftEyeLm.position.x.toDouble(),
+          y: leftEyeLm.position.y.toDouble(),
+        );
+      }
+
+      FaceLandmarkPoint? rightEyePoint;
+      if (rightEyeLm != null) {
+        rightEyePoint = FaceLandmarkPoint(
+          x: rightEyeLm.position.x.toDouble(),
+          y: rightEyeLm.position.y.toDouble(),
+        );
+      }
+
       return FaceObservation(
         bounds: FaceBounds(
           left: bounds.left,
@@ -51,6 +71,8 @@ class MlKitFaceObservationService implements FaceObservationService {
         leftEyeOpenProbability: face.leftEyeOpenProbability,
         rightEyeOpenProbability: face.rightEyeOpenProbability,
         smilingProbability: face.smilingProbability,
+        leftEye: leftEyePoint,
+        rightEye: rightEyePoint,
       );
     } on AppFailure {
       rethrow;

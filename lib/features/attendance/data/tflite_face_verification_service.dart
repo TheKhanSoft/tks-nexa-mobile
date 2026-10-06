@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as image;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/biometric_photo_crop_helper.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_biometric_profile.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_verification_service.dart';
@@ -116,10 +117,16 @@ class TfliteFaceVerificationService implements FaceVerificationService {
   /// Extracts a 192-D MobileFaceNet unit vector from arbitrary photo bytes.
   /// Used for on-device vector generation during profile photo setup and enrollment.
   static Future<List<double>> extractEmbeddingFromBytes(Uint8List imageBytes) async {
-    final decoded = image.decodeImage(imageBytes);
+    final observation = await BiometricPhotoCropHelper.detectFaceSilently(imageBytes);
+    final croppedBytes = BiometricPhotoCropHelper.cropFaceOnly(
+      imageBytes,
+      observation?.bounds,
+      eyeA: observation?.leftEye,
+      eyeB: observation?.rightEye,
+    );
+    final decoded = image.decodeImage(croppedBytes ?? imageBytes);
     if (decoded == null) throw const FormatException('Invalid face image.');
-    final oriented = image.bakeOrientation(decoded);
-    final cropped = _cropFace(oriented, null);
+    final cropped = image.bakeOrientation(decoded);
 
     try {
       final interpreter = await _getInterpreter();

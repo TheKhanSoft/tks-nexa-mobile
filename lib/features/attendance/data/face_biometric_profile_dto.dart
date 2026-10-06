@@ -59,7 +59,7 @@ class FaceBiometricProfileDto {
       return FaceBiometricProfile(
         employeeId: employeeId.toString().trim(),
         embedding: _embedding(rawEmbedding),
-        matchThreshold: threshold is num ? threshold.toDouble() : 0.70,
+        matchThreshold: threshold is num ? threshold.toDouble() : 0.65,
         modelVersion: modelVersion is String && modelVersion.trim().isNotEmpty
             ? modelVersion.trim()
             : 'Face Biometric (v1.0)',

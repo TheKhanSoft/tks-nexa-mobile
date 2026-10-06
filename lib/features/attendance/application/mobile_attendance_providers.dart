@@ -208,7 +208,7 @@ class AttendanceSubmissionController
         throw AppFailure(
           code: FailureCode.invalidInput,
           message:
-              'Facial similarity score (${(verification.similarity * 100).toStringAsFixed(1)}%) is below the required 70.0% matching threshold.',
+              'Facial similarity score (${(verification.similarity * 100).toStringAsFixed(1)}%) is below the required ${(profile.matchThreshold * 100).toStringAsFixed(1)}% matching threshold.',
           diagnosticCode: 'CONFIDENCE_BELOW_THRESHOLD',
         );
       }

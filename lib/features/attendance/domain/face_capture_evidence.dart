@@ -38,3 +38,14 @@ class FaceBounds {
   final double width;
   final double height;
 }
+
+class FaceLandmarkPoint {
+  const FaceLandmarkPoint({
+    required this.x,
+    required this.y,
+  });
+
+  final double x;
+  final double y;
+}
+
