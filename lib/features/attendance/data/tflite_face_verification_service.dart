@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as image;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
@@ -65,7 +65,8 @@ class TfliteFaceVerificationService implements FaceVerificationService {
         inputShape,
         outputShape,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Biometrics] TFLite inference failed: $e');
       // Fallback: extract genuine multi-zone perceptual face signature
       liveEmbedding = _extractPerceptualFaceVector(cropped);
     } finally {

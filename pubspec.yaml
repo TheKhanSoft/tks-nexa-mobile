@@ -75,6 +75,7 @@ flutter:
 
   assets:
     - assets/models/
+    - assets/models/mobile_facenet.tflite
     - assets/images/
 
   # To add assets to your application, add an assets section, like this:
