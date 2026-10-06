@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tks_nexa_attendance/app/app_router.dart';
 import 'package:tks_nexa_attendance/app/app_theme.dart';
@@ -27,7 +28,8 @@ class AttendancePreparationScreen extends ConsumerStatefulWidget {
 }
 
 class _AttendancePreparationScreenState
-    extends ConsumerState<AttendancePreparationScreen> {
+    extends ConsumerState<AttendancePreparationScreen>
+    with WidgetsBindingObserver {
   static const _maximumLocationAge = Duration(seconds: 30);
   static const _maximumLocationAccuracyM = 50.0;
 
@@ -35,16 +37,57 @@ class _AttendancePreparationScreenState
   FaceCaptureEvidence? _faceCapture;
   String? _locationError;
   bool _capturingLocation = false;
+  bool _isLocationServiceDisabled = false;
+  bool _isLocationPermissionBlocked = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Automatically trigger fresh GPS location capture on screen load
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _location == null && !_capturingLocation) {
         _captureLocation();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _discardFaceCapture(_faceCapture);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkLocationServiceStatus();
+    }
+  }
+
+  Future<void> _checkLocationServiceStatus() async {
+    try {
+      final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!mounted) return;
+      if (isServiceEnabled) {
+        if (_isLocationServiceDisabled) {
+          setState(() {
+            _isLocationServiceDisabled = false;
+            _locationError = null;
+          });
+        }
+        if (_location == null || !_locationReady(_requiredLocationAccuracyM)) {
+          await _captureLocation();
+        }
+      } else {
+        setState(() {
+          _isLocationServiceDisabled = true;
+          _locationError =
+              'GPS is turned off. Tap "Open GPS Settings" to enable location services.';
+        });
+      }
+    } catch (_) {}
   }
 
   bool _locationReady(double maximumAccuracyM) {
@@ -68,19 +111,59 @@ class _AttendancePreparationScreenState
       _locationError = null;
     });
     try {
+      final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!isServiceEnabled) {
+        if (mounted) {
+          setState(() {
+            _isLocationServiceDisabled = true;
+            _locationError =
+                'GPS is turned off. Tap "Open GPS Settings" to enable location services.';
+          });
+        }
+        return;
+      }
+
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          setState(() {
+            _isLocationPermissionBlocked = true;
+            _locationError =
+                'Location permission is blocked. Tap "Open App Settings" to allow location.';
+          });
+        }
+        return;
+      }
+
       final evidence = await ref
           .read(locationCaptureServiceProvider)
           .captureFresh();
       if (!mounted) return;
       setState(() {
         _location = evidence;
+        _isLocationServiceDisabled = false;
+        _isLocationPermissionBlocked = false;
         if (!evidence.meetsAccuracy(_requiredLocationAccuracyM)) {
           _locationError =
               'Accuracy is ${evidence.horizontalAccuracyM.toStringAsFixed(0)} m. Move into an open area and retry.';
         }
       });
     } on AppFailure catch (error) {
-      if (mounted) setState(() => _locationError = error.message);
+      if (mounted) {
+        setState(() {
+          if (error.diagnosticCode == 'LOCATION_SERVICES_DISABLED') {
+            _isLocationServiceDisabled = true;
+            _locationError =
+                'GPS is turned off. Tap "Open GPS Settings" to enable location services.';
+          } else if (error.diagnosticCode == 'LOCATION_PERMISSION_BLOCKED') {
+            _isLocationPermissionBlocked = true;
+            _locationError =
+                'Location permission is blocked. Tap "Open App Settings" to allow location.';
+          } else {
+            _locationError = error.message;
+          }
+        });
+      }
     } on Object {
       if (mounted) {
         setState(
@@ -91,6 +174,24 @@ class _AttendancePreparationScreenState
     } finally {
       if (mounted) setState(() => _capturingLocation = false);
     }
+  }
+
+  Future<void> _handleLocationAction() async {
+    if (_capturingLocation) return;
+
+    final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!isServiceEnabled) {
+      await Geolocator.openLocationSettings();
+      return;
+    }
+
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.deniedForever) {
+      await Geolocator.openAppSettings();
+      return;
+    }
+
+    await _captureLocation();
   }
 
   Future<void> _captureFace() async {
@@ -234,12 +335,6 @@ class _AttendancePreparationScreenState
   }
 
   @override
-  void dispose() {
-    _discardFaceCapture(_faceCapture);
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final faceCapture = _faceCapture;
     final biometricProfile = ref.watch(faceBiometricProfileProvider);
@@ -332,15 +427,33 @@ class _AttendancePreparationScreenState
             error: _locationError,
             action: FilledButton.icon(
               key: const Key('capture_location'),
-              onPressed: _capturingLocation ? null : _captureLocation,
+              onPressed: _capturingLocation ? null : _handleLocationAction,
+              style: (_isLocationServiceDisabled || _isLocationPermissionBlocked)
+                  ? FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFD97706),
+                      foregroundColor: Colors.white,
+                    )
+                  : null,
               icon: _capturingLocation
                   ? const SizedBox.square(
                       dimension: 17,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Icon(Icons.gps_fixed_rounded),
+                  : Icon(
+                      _isLocationServiceDisabled
+                          ? Icons.location_off_rounded
+                          : _isLocationPermissionBlocked
+                              ? Icons.settings_rounded
+                              : Icons.gps_fixed_rounded,
+                    ),
               label: Text(
-                _location == null ? 'Acquiring GPS…' : 'Refresh Location',
+                _capturingLocation
+                    ? 'Acquiring GPS…'
+                    : _isLocationServiceDisabled
+                        ? 'Open GPS Settings'
+                        : _isLocationPermissionBlocked
+                            ? 'Open App Settings'
+                            : (_location == null ? 'Acquiring GPS…' : 'Refresh Location'),
               ),
             ),
           ),
@@ -470,6 +583,12 @@ class _AttendancePreparationScreenState
   }
 
   String _locationDescription() {
+    if (_isLocationServiceDisabled) {
+      return 'Location services (GPS) are turned off on your device. Tap below to open GPS Settings.';
+    }
+    if (_isLocationPermissionBlocked) {
+      return 'Location permission is denied in device settings. Tap below to open App Settings.';
+    }
     final location = _location;
     if (location == null) {
       return 'Automatically acquiring fresh GPS coordinates…';
