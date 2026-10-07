@@ -686,7 +686,7 @@ class _TodaysAttendanceCard extends ConsumerWidget {
                     ? const Color(0xFF10B981)
                     : (todayRec.isLate ? const Color(0xFFF59E0B) : const Color(0xFF2563EB)),
                 todayRec.isPresent ? Icons.check_circle_rounded : Icons.access_time_filled_rounded,
-                'Punch In: ${todayRec.firstInFormatted} · ${todayRec.lastOutFormatted != null ? 'Punch Out: ${todayRec.lastOutFormatted}' : 'Checked In (Active)'}',
+                'Punch In: ${todayRec.firstInFormatted} · ${(todayRec.lastOutFormatted != null && todayRec.lastOutFormatted != todayRec.firstInFormatted) ? 'Punch Out: ${todayRec.lastOutFormatted}' : 'Checked In (Active)'}',
               )
             : _getTodayStatusInfo(profile);
 
@@ -1315,7 +1315,7 @@ class _RecentAttendanceSection extends ConsumerWidget {
         subtitle:
             '${todayRec.shiftName.isNotEmpty ? todayRec.shiftName : shiftName} · ${todayRec.trustScore ?? 100}% Trust',
         timeRange:
-            '${todayRec.firstInFormatted ?? '--:--'} - ${todayRec.lastOutFormatted ?? 'Active'}',
+            '${todayRec.firstInFormatted ?? '--:--'} - ${(todayRec.lastOutFormatted != null && todayRec.lastOutFormatted != todayRec.firstInFormatted) ? todayRec.lastOutFormatted! : '--:--'}',
         capturedPhotoUrl: todayRec.photoUrl,
         trustScore: todayRec.trustScore,
         locationName: todayRec.locationName,

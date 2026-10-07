@@ -18,6 +18,7 @@ import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evid
 import 'package:tks_nexa_attendance/features/attendance/domain/location_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/biometric_scanning_verification_dialog.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/face_capture_screen.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/widgets/current_location_card.dart';
 
 class AttendancePreparationScreen extends ConsumerStatefulWidget {
   const AttendancePreparationScreen({super.key});
@@ -418,44 +419,21 @@ class _AttendancePreparationScreenState
             onUploadPhoto: _captureAndUploadPhoto,
           ),
           const SizedBox(height: 14),
-          _EvidenceCard(
-            step: '1',
-            icon: Icons.my_location_rounded,
-            title: 'Fresh Location',
-            subtitle: _locationDescription(),
-            ready: locationReady,
-            error: _locationError,
-            action: FilledButton.icon(
-              key: const Key('capture_location'),
-              onPressed: _capturingLocation ? null : _handleLocationAction,
-              style: (_isLocationServiceDisabled || _isLocationPermissionBlocked)
-                  ? FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFD97706),
-                      foregroundColor: Colors.white,
-                    )
-                  : null,
-              icon: _capturingLocation
-                  ? const SizedBox.square(
-                      dimension: 17,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      _isLocationServiceDisabled
-                          ? Icons.location_off_rounded
-                          : _isLocationPermissionBlocked
-                              ? Icons.settings_rounded
-                              : Icons.gps_fixed_rounded,
-                    ),
-              label: Text(
-                _capturingLocation
-                    ? 'Acquiring GPS…'
-                    : _isLocationServiceDisabled
-                        ? 'Open GPS Settings'
-                        : _isLocationPermissionBlocked
-                            ? 'Open App Settings'
-                            : (_location == null ? 'Acquiring GPS…' : 'Refresh Location'),
-              ),
-            ),
+          CurrentLocationCard(
+            location: _location,
+            capturing: _capturingLocation,
+            isLocationDisabled: _isLocationServiceDisabled,
+            isPermissionBlocked: _isLocationPermissionBlocked,
+            onRefresh: _handleLocationAction,
+            onGeocodeResolved: (geocoded) {
+              if (_location != null && geocoded.primaryLocality.isNotEmpty) {
+                setState(() {
+                  _location = _location!.copyWith(
+                    locationName: '${geocoded.primaryLocality}, ${geocoded.detailedAddress}',
+                  );
+                });
+              }
+            },
           ),
           const SizedBox(height: 14),
           _EvidenceCard(
@@ -580,23 +558,6 @@ class _AttendancePreparationScreenState
         ],
       ),
     );
-  }
-
-  String _locationDescription() {
-    if (_isLocationServiceDisabled) {
-      return 'Location services (GPS) are turned off on your device. Tap below to open GPS Settings.';
-    }
-    if (_isLocationPermissionBlocked) {
-      return 'Location permission is denied in device settings. Tap below to open App Settings.';
-    }
-    final location = _location;
-    if (location == null) {
-      return 'Automatically acquiring fresh GPS coordinates…';
-    }
-    final mockNote = location.isMocked
-        ? ' · device reported mock telemetry'
-        : '';
-    return '${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)} · ±${location.horizontalAccuracyM.toStringAsFixed(0)} m$mockNote';
   }
 }
 

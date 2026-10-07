@@ -23,6 +23,24 @@ class LocationEvidence {
   bool meetsAccuracy(double maximumAccuracyM) =>
       horizontalAccuracyM > 0 && horizontalAccuracyM <= maximumAccuracyM;
 
+  LocationEvidence copyWith({
+    double? latitude,
+    double? longitude,
+    double? horizontalAccuracyM,
+    DateTime? capturedAt,
+    bool? isMocked,
+    String? locationName,
+  }) {
+    return LocationEvidence(
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      horizontalAccuracyM: horizontalAccuracyM ?? this.horizontalAccuracyM,
+      capturedAt: capturedAt ?? this.capturedAt,
+      isMocked: isMocked ?? this.isMocked,
+      locationName: locationName ?? this.locationName,
+    );
+  }
+
   Map<String, Object> toJson() {
     return {
       'latitude': latitude,

@@ -57,6 +57,7 @@ class AttendanceRecordDto {
           final existing = groupedMap[dateKey]!;
           final earliestIn = _compareTimes(existing.firstInFormatted, record.firstInFormatted, isEarliest: true);
           final latestOut = _compareTimes(existing.lastOutFormatted, record.lastOutFormatted, isEarliest: false);
+          final effectiveOut = (latestOut != null && latestOut != earliestIn) ? latestOut : null;
           groupedMap[dateKey] = AttendanceRecord(
             id: existing.id,
             date: existing.date,
@@ -64,8 +65,8 @@ class AttendanceRecordDto {
             status: existing.isPresent ? existing.status : record.status,
             firstIn: existing.firstIn,
             firstInFormatted: earliestIn,
-            lastOut: latestOut,
-            lastOutFormatted: latestOut,
+            lastOut: effectiveOut,
+            lastOutFormatted: effectiveOut,
             shiftName: existing.shiftName,
             photoUrl: record.photoUrl ?? existing.photoUrl,
             locationName: record.locationName ?? existing.locationName,
@@ -151,8 +152,14 @@ class AttendanceRecordDto {
     final status = _string(map['status'], fallback: 'Present');
     final firstIn = _string(map['first_in'], fallback: _string(map['punch_in']));
     final firstInFormatted = _string(map['first_in_formatted'], fallback: _string(map['check_in_time']));
-    final lastOut = _string(map['last_out'], fallback: _string(map['punch_out']));
-    final lastOutFormatted = _string(map['last_out_formatted'], fallback: _string(map['check_out_time']));
+    final rawLastOut = _string(map['last_out'], fallback: _string(map['punch_out']));
+    final rawLastOutFormatted = _string(map['last_out_formatted'], fallback: _string(map['check_out_time']));
+
+    // Checkout time should never be identical to checkin time; if no distinct checkout occurred, it must be null
+    final isSameAsCheckIn = (rawLastOut.isNotEmpty && rawLastOut == firstIn) ||
+        (rawLastOutFormatted.isNotEmpty && (rawLastOutFormatted == firstInFormatted || rawLastOutFormatted == firstIn));
+    final lastOut = (!isSameAsCheckIn && rawLastOut.isNotEmpty) ? rawLastOut : null;
+    final lastOutFormatted = (!isSameAsCheckIn && rawLastOutFormatted.isNotEmpty) ? rawLastOutFormatted : null;
 
     return AttendanceRecord(
       id: _string(map['id'], fallback: date.toIso8601String().split('T').first),
@@ -161,8 +168,8 @@ class AttendanceRecordDto {
       status: status,
       firstIn: firstIn.isNotEmpty ? firstIn : null,
       firstInFormatted: firstInFormatted.isNotEmpty ? firstInFormatted : (firstIn.isNotEmpty ? firstIn : null),
-      lastOut: lastOut.isNotEmpty ? lastOut : null,
-      lastOutFormatted: lastOutFormatted.isNotEmpty ? lastOutFormatted : (lastOut.isNotEmpty ? lastOut : null),
+      lastOut: lastOut,
+      lastOutFormatted: lastOutFormatted,
       shiftName: _string(map['shift_name'], fallback: _string(map['shift'], fallback: 'General Shift')),
       photoUrl: _string(
         map['photo_url'],

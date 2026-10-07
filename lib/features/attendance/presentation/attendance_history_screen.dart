@@ -779,7 +779,8 @@ class _DailyActivityTile extends StatelessWidget {
     final style = _StatusStyle.of(record.status, cs);
 
     final inTime = record.firstInFormatted ?? record.firstIn ?? '--:--';
-    final outTime = record.lastOutFormatted ?? record.lastOut ?? '--:--';
+    final rawOut = record.lastOutFormatted ?? record.lastOut;
+    final outTime = (rawOut != null && rawOut != inTime && rawOut != '--:--') ? rawOut : '--:--';
     // Leave records label the third cell "Worked", not "Net Duration".
     final durationLabel = record.isOnLeave ? 'Worked' : 'Net Duration';
 

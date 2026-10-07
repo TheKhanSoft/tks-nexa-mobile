@@ -55,6 +55,10 @@ class AttendanceMarkRequest {
       'match_threshold': verification.threshold,
       if (verification.liveVector != null)
         'face_vector': verification.liveVector!,
+      if (verification.mirroredVector != null) ...{
+        'face_vector_mirrored': verification.mirroredVector!,
+        'face_vector_flipped': verification.mirroredVector!,
+      },
       'liveness_passed': verification.livenessPassed,
       'liveness_verified': verification.livenessPassed,
       'liveness_challenge': verification.challenge,
@@ -90,6 +94,12 @@ class AttendanceMarkRequest {
         'similarity_score': clampedScore,
         'liveness_verified': verification.livenessPassed,
         'verification_method': 'Face Biometric',
+        if (verification.liveVector != null)
+          'face_vector': verification.liveVector!,
+        if (verification.mirroredVector != null) ...{
+          'face_vector_mirrored': verification.mirroredVector!,
+          'face_vector_flipped': verification.mirroredVector!,
+        },
       },
     };
   }

@@ -71,6 +71,7 @@ class TfliteFaceVerificationService implements FaceVerificationService {
         : _cropFace(oriented, capture.faceBounds);
 
     List<double> liveEmbedding;
+    List<double> mirroredEmbedding;
 
     try {
       final interpreter = await _getInterpreter();
@@ -88,6 +89,14 @@ class TfliteFaceVerificationService implements FaceVerificationService {
       liveEmbedding = _extractTfliteEmbedding(
         interpreter,
         cropped,
+        inputShape,
+        outputShape,
+      );
+
+      final flipped = image.flipHorizontal(cropped);
+      mirroredEmbedding = _extractTfliteEmbedding(
+        interpreter,
+        flipped,
         inputShape,
         outputShape,
       );
@@ -111,6 +120,7 @@ class TfliteFaceVerificationService implements FaceVerificationService {
       challenge: capture.livenessChallenge,
       modelVersion: 'MobileFaceNet (192-D)',
       liveVector: liveEmbedding,
+      mirroredVector: mirroredEmbedding,
     );
   }
 
