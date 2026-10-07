@@ -75,7 +75,6 @@ class _AttendancePreparationScreenState
         if (_isLocationServiceDisabled) {
           setState(() {
             _isLocationServiceDisabled = false;
-            _locationError = null;
           });
         }
         if (_location == null || !_locationReady(_requiredLocationAccuracyM)) {
@@ -84,8 +83,6 @@ class _AttendancePreparationScreenState
       } else {
         setState(() {
           _isLocationServiceDisabled = true;
-          _locationError =
-              'GPS is turned off. Tap "Open GPS Settings" to enable location services.';
         });
       }
     } catch (_) {}
@@ -109,7 +106,6 @@ class _AttendancePreparationScreenState
     if (_capturingLocation) return;
     setState(() {
       _capturingLocation = true;
-      _locationError = null;
     });
     try {
       final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -117,8 +113,6 @@ class _AttendancePreparationScreenState
         if (mounted) {
           setState(() {
             _isLocationServiceDisabled = true;
-            _locationError =
-                'GPS is turned off. Tap "Open GPS Settings" to enable location services.';
           });
         }
         return;
@@ -129,8 +123,6 @@ class _AttendancePreparationScreenState
         if (mounted) {
           setState(() {
             _isLocationPermissionBlocked = true;
-            _locationError =
-                'Location permission is blocked. Tap "Open App Settings" to allow location.';
           });
         }
         return;
@@ -209,7 +201,11 @@ class _AttendancePreparationScreenState
     );
     if (!mounted || capture == null) return;
     _discardFaceCapture(_faceCapture);
-    setState(() => _faceCapture = capture);
+    setState(() {
+      _faceCapture = capture;
+      _location = null;
+    });
+    await _captureLocation();
   }
 
   void _removeFaceCapture() {
@@ -317,7 +313,13 @@ class _AttendancePreparationScreenState
         onUploadPhoto: _captureAndUploadPhoto,
       ),
     );
-    if (!mounted || result == null) return;
+    if (!mounted || result == null) {
+      if (mounted) {
+        setState(() => _location = null);
+        _captureLocation();
+      }
+      return;
+    }
     _discardFaceCapture(_faceCapture);
     setState(() => _faceCapture = null);
     ref.invalidate(attendanceHistoryResponseProvider);
@@ -424,6 +426,7 @@ class _AttendancePreparationScreenState
             capturing: _capturingLocation,
             isLocationDisabled: _isLocationServiceDisabled,
             isPermissionBlocked: _isLocationPermissionBlocked,
+            isReady: locationReady,
             onRefresh: _handleLocationAction,
             onGeocodeResolved: (geocoded) {
               if (_location != null && geocoded.primaryLocality.isNotEmpty) {
@@ -435,6 +438,18 @@ class _AttendancePreparationScreenState
               }
             },
           ),
+          if (_locationError != null && _location != null && !locationReady) ...[
+            const SizedBox(height: 8),
+            Text(
+              _locationError!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           _EvidenceCard(
             step: '2',
@@ -511,7 +526,7 @@ class _AttendancePreparationScreenState
                     !submission.isLoading
                 ? _submitAttendance
                 : null,
-            icon: submission.isLoading
+            icon: submission.isLoading || (_capturingLocation && faceCapture != null)
                 ? const SizedBox.square(
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
@@ -520,7 +535,9 @@ class _AttendancePreparationScreenState
             label: Text(
               submission.isLoading
                   ? 'Verifying securely…'
-                  : 'Verify & Mark Attendance',
+                  : (_capturingLocation && faceCapture != null
+                      ? 'Verifying location…'
+                      : 'Verify & Mark Attendance'),
             ),
           ),
           if (submissionError != null) ...[
@@ -922,7 +939,6 @@ class _EvidenceCard extends StatelessWidget {
     required this.subtitle,
     required this.ready,
     required this.action,
-    this.error,
     this.preview,
   });
 
@@ -931,7 +947,6 @@ class _EvidenceCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool ready;
-  final String? error;
   final Widget? preview;
   final Widget action;
 
@@ -995,16 +1010,6 @@ class _EvidenceCard extends StatelessWidget {
               subtitle,
               style: TextStyle(color: brand.mutedText, height: 1.4),
             ),
-            if (error case final message?) ...[
-              const SizedBox(height: 10),
-              Text(
-                message,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
             if (preview case final child?) ...[
               const SizedBox(height: 14),
               child,

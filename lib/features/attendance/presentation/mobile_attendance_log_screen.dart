@@ -33,6 +33,27 @@ class MobilePunchLogItem {
   final String? photoUrl;
 }
 
+DateTime _combineDateAndTime(DateTime date, String? timeStr) {
+  if (timeStr == null || timeStr.isEmpty || timeStr == '--:--' || timeStr == 'Pending') return date;
+  try {
+    final s = timeStr.trim();
+    final match12 = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', caseSensitive: false).firstMatch(s);
+    if (match12 != null) {
+      var hour = int.parse(match12.group(1)!);
+      final min = int.parse(match12.group(2)!);
+      final period = match12.group(3)!.toUpperCase();
+      if (period == 'PM' && hour < 12) hour += 12;
+      if (period == 'AM' && hour == 12) hour = 0;
+      return DateTime(date.year, date.month, date.day, hour, min);
+    }
+    final parts = s.split(':');
+    if (parts.length >= 2) {
+      return DateTime(date.year, date.month, date.day, int.parse(parts[0]), int.parse(parts[1]));
+    }
+  } catch (_) {}
+  return date;
+}
+
 final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) async {
   final api = ref.watch(mobileAttendanceApiProvider);
   final selfieStorage = ref.watch(localSelfieStorageProvider);
@@ -44,7 +65,8 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
       for (final log in rawLogs) {
         final id = (log['id'] ?? log['event_uid'] ?? '').toString();
         final rawTs = log['timestamp'] ?? log['created_at'];
-        final ts = rawTs is String ? (DateTime.tryParse(rawTs) ?? DateTime.now()) : DateTime.now();
+        final parsed = rawTs is String ? DateTime.tryParse(rawTs) : null;
+        final ts = parsed != null ? parsed.toLocal() : DateTime.now();
 
         final rawScore = log['similarity_score'] ?? log['confidence_score'] ?? log['match_score'];
         var scoreInt = 95;
@@ -65,11 +87,14 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
 
         final localSelfie = await selfieStorage.getSelfiePath(date: ts, type: 'check_in');
 
+        final verMethod = (log['verification_method'] ?? 'Face Biometric').toString().toLowerCase();
+        final isExit = verMethod.contains('exit') || verMethod.contains('out');
+
         items.add(
           MobilePunchLogItem(
             id: id,
             timestamp: ts,
-            typeLabel: log['verification_method']?.toString().contains('exit') == true ? 'Clock Out' : 'Clock In',
+            typeLabel: isExit ? 'Clock Out' : 'Clock In',
             status: statusStr,
             matchScore: scoreInt,
             threshold: 70,
@@ -95,11 +120,13 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
       if (rec.firstIn != null && rec.firstIn != '--:--' && rec.firstIn != 'Pending') {
         final selfiePath = await selfieStorage.getSelfiePath(date: rec.date, type: 'check_in');
         final isPresent = rec.isPresent;
+        final inTimeStr = rec.firstInFormatted ?? rec.firstIn!;
+        final inDt = _combineDateAndTime(rec.date, inTimeStr);
         items.add(
           MobilePunchLogItem(
             id: '${rec.id}-in',
-            timestamp: rec.date,
-            typeLabel: 'Clock In · ${rec.firstInFormatted ?? rec.firstIn!}',
+            timestamp: inDt,
+            typeLabel: 'Clock In · $inTimeStr',
             status: isPresent ? 'Verified & Logged' : rec.status,
             matchScore: rec.trustScore ?? (isPresent ? 96 : 60),
             threshold: 70,
@@ -113,11 +140,13 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
       }
       if (rec.lastOut != null && rec.lastOut != '--:--' && rec.lastOut != 'Pending' && rec.lastOut != rec.firstIn) {
         final selfiePath = await selfieStorage.getSelfiePath(date: rec.date, type: 'check_out');
+        final outTimeStr = rec.lastOutFormatted ?? rec.lastOut!;
+        final outDt = _combineDateAndTime(rec.date, outTimeStr);
         items.add(
           MobilePunchLogItem(
             id: '${rec.id}-out',
-            timestamp: rec.date,
-            typeLabel: 'Clock Out · ${rec.lastOutFormatted ?? rec.lastOut!}',
+            timestamp: outDt,
+            typeLabel: 'Clock Out · $outTimeStr',
             status: 'Verified & Logged',
             matchScore: rec.trustScore ?? 94,
             threshold: 70,
@@ -151,22 +180,59 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'Refresh Log',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.invalidate(mobilePunchLogsProvider),
+            onPressed: () async {
+              ref.invalidate(mobilePunchLogsProvider);
+              await ref.read(mobilePunchLogsProvider.future);
+            },
           ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(mobilePunchLogsProvider),
+        onRefresh: () async {
+          ref.invalidate(mobilePunchLogsProvider);
+          await ref.read(mobilePunchLogsProvider.future);
+        },
         child: logsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => Center(child: Text('Unable to load mobile logs: $err')),
+          error: (err, _) => LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text('Unable to load mobile logs: $err', textAlign: TextAlign.center),
+                  ),
+                ),
+              ),
+            ),
+          ),
           data: (logs) {
             if (logs.isEmpty) {
-              return const Center(
-                child: Text('No mobile attendance captures logged yet.', style: TextStyle(fontWeight: FontWeight.bold)),
+              return LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.history_rounded, size: 54, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                          const SizedBox(height: 14),
+                          const Text('No mobile attendance captures logged yet.', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 8),
+                          Text('Pull down to refresh', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               );
             }
             return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 48),
               children: [
                 // Technical Neural Architecture Header Banner

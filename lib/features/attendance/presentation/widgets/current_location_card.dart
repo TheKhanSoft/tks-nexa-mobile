@@ -10,6 +10,7 @@ class CurrentLocationCard extends StatefulWidget {
     required this.isLocationDisabled,
     required this.isPermissionBlocked,
     required this.onRefresh,
+    this.isReady = true,
     this.onGeocodeResolved,
   });
 
@@ -17,6 +18,7 @@ class CurrentLocationCard extends StatefulWidget {
   final bool capturing;
   final bool isLocationDisabled;
   final bool isPermissionBlocked;
+  final bool isReady;
   final VoidCallback onRefresh;
   final ValueChanged<GeocodedAddress>? onGeocodeResolved;
 
@@ -168,8 +170,8 @@ class _CurrentLocationCardState extends State<CurrentLocationCard> {
       );
     }
 
-    // Acquiring State
-    if (widget.location == null || widget.capturing) {
+    // Acquiring / Verifying State
+    if (widget.location == null || widget.capturing || !widget.isReady) {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(

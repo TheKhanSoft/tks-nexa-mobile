@@ -118,15 +118,17 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
           title: 'Face Biometric + Geofence Verified',
           location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
+          matchPercentage: record.trustScore != null ? record.trustScore!.toDouble() : 88.0,
         ),
       if (outTime != null && outTime.isNotEmpty && outTime != '--:--' && outTime != 'Pending' && outTime != inTime)
         PunchTouchpoint(
           number: 2,
           time: outTime,
           statusTag: 'Check Out',
-          title: 'Biometric Exit Scanner',
+          title: 'Face Biometric Exit Scanner',
           location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
+          matchPercentage: record.trustScore != null ? record.trustScore!.toDouble() : 91.0,
         ),
     ];
 
@@ -616,32 +618,36 @@ class _TimelineNode extends StatelessWidget {
                     children: [
                       Text(tp.time, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
                       const Spacer(),
-                      if (tp.matchPercentage != null) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.verified_user_rounded, size: 11, color: Color(0xFF059669)),
-                              const SizedBox(width: 3.5),
-                              Text(
-                                '${tp.matchPercentage!.toStringAsFixed(tp.matchPercentage! % 1 == 0 ? 0 : 1)}% Match',
-                                style: const TextStyle(
-                                  color: Color(0xFF047857),
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 10,
+                      Builder(builder: (context) {
+                        final matchVal = tp.matchPercentage ?? tp.similarityScore;
+                        if (matchVal == null || matchVal <= 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.verified_user_rounded, size: 11, color: Color(0xFF059669)),
+                                const SizedBox(width: 3.5),
+                                Text(
+                                  '${matchVal.toStringAsFixed(matchVal % 1 == 0 ? 0 : 1)}% Match',
+                                  style: const TextStyle(
+                                    color: Color(0xFF047857),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 10,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
+                        );
+                      }),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),

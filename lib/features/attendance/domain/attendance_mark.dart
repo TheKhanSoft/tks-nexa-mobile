@@ -63,7 +63,7 @@ class AttendanceMarkRequest {
       'liveness_verified': verification.livenessPassed,
       'liveness_challenge': verification.challenge,
       'face_model_version': 'Face Biometric (v1.0)',
-      'timestamp': capturedAt.toIso8601String(),
+      'timestamp': capturedAt.toUtc().toIso8601String(),
       'device_id': deviceId,
       if (deviceModel != null) 'device_model': deviceModel!,
       if (osVersion != null) 'os_version': osVersion!,
@@ -87,7 +87,7 @@ class AttendanceMarkRequest {
         'longitude': location.longitude,
         'horizontal_accuracy': location.horizontalAccuracyM,
         if (locName != null && locName.isNotEmpty) 'location_name': locName,
-        'captured_at': location.capturedAt.toIso8601String(),
+        'captured_at': location.capturedAt.toUtc().toIso8601String(),
         'is_mocked': location.isMocked,
       },
       'biometrics': <String, Object>{
