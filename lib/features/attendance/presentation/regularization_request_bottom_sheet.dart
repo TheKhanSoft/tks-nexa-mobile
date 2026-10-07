@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 
 class RegularizationRequestBottomSheet extends StatefulWidget {
-  const RegularizationRequestBottomSheet({super.key});
+  const RegularizationRequestBottomSheet({
+    super.key,
+    this.initialDate,
+    this.initialPunchType,
+  });
 
-  static void show(BuildContext context) {
+  final DateTime? initialDate;
+  final String? initialPunchType;
+
+  static void show(BuildContext context, {DateTime? initialDate, String? initialPunchType}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const RegularizationRequestBottomSheet(),
+      builder: (context) => RegularizationRequestBottomSheet(
+        initialDate: initialDate,
+        initialPunchType: initialPunchType,
+      ),
     );
   }
 
@@ -20,11 +30,20 @@ class RegularizationRequestBottomSheet extends StatefulWidget {
 class _RegularizationRequestBottomSheetState
     extends State<RegularizationRequestBottomSheet> {
   final _formKey = GlobalKey<FormState>();
-  DateTime _selectedDate = DateTime.now().subtract(const Duration(days: 1));
+  late DateTime _selectedDate;
   String _punchType = 'check_in';
   TimeOfDay _requestedTime = const TimeOfDay(hour: 9, minute: 0);
   final _reasonController = TextEditingController();
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = widget.initialDate ?? DateTime.now();
+    if (widget.initialPunchType != null && widget.initialPunchType!.isNotEmpty) {
+      _punchType = widget.initialPunchType!;
+    }
+  }
 
   @override
   void dispose() {

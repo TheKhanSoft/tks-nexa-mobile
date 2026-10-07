@@ -54,6 +54,8 @@ class PunchTouchpoint {
     required this.title,
     required this.location,
     required this.deviceLabel,
+    this.matchPercentage,
+    this.similarityScore,
   });
 
   final int number;
@@ -62,6 +64,8 @@ class PunchTouchpoint {
   final String title;
   final String location;
   final String deviceLabel;
+  final double? matchPercentage;
+  final double? similarityScore;
 }
 
 class GeofenceAudit {

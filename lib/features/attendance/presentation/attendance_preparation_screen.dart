@@ -659,62 +659,257 @@ class _BiometricReadinessCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final brand =
-        Theme.of(context).extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
-    final (icon, title, subtitle, color) = switch (profile) {
-      AsyncData() => (
-        Icons.verified_user_rounded,
-        'Face Profile Ready',
-        'Face profile enrolled and ready.',
-        AppPalette.emerald,
-      ),
-      AsyncError(:final error) => (
-        Icons.face_retouching_off_rounded,
-        'Face Profile Unavailable',
-        error is AppFailure
-            ? error.message
-            : 'The face profile could not be loaded.',
-        Theme.of(context).colorScheme.error,
-      ),
-      _ => (
-        Icons.downloading_rounded,
-        'Loading Face Profile',
-        'Checking the protected employee biometric profile…',
-        Theme.of(context).colorScheme.primary,
-      ),
-    };
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: Color.alphaBlend(
-            color.withValues(alpha: .13),
-            brand.softAccent,
-          ),
-          foregroundColor: color,
-          child: Icon(icon),
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: profile.hasError
+              ? const Color(0xFFFCA5A5).withValues(alpha: 0.6)
+              : cs.outlineVariant.withValues(alpha: 0.4),
+          width: profile.hasError ? 1.5 : 1.0,
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text(subtitle),
-        trailing: profile.hasError
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: switch (profile) {
+        AsyncData() => Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppPalette.emerald.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.verified_user_rounded,
+                  color: AppPalette.emerald,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Face Profile Ready',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppPalette.emerald.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('🟢 ', style: TextStyle(fontSize: 8)),
+                              Text(
+                                'Enrolled',
+                                style: TextStyle(
+                                  color: AppPalette.emerald,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Face profile enrolled and ready for verification.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        AsyncError(:final error) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  IconButton(
-                    tooltip: 'Retry enrollment profile',
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh_rounded),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.face_retouching_off_rounded,
+                      color: Color(0xFFEF4444),
+                      size: 24,
+                    ),
                   ),
-                  const SizedBox(width: 4),
-                  FilledButton.tonalIcon(
-                    onPressed: onUploadPhoto,
-                    icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                    label: const Text('Upload Photo'),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Face Profile Unavailable',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                                color: Color(0xFFB91C1C),
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Action Required',
+                                style: TextStyle(
+                                  color: Color(0xFFDC2626),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-              )
-            : null,
-      ),
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text(
+                  error is AppFailure
+                      ? error.message
+                      : 'No face biometric is enrolled for this employee. Please enroll your face first.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: onUploadPhoto,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: cs.primary,
+                        foregroundColor: cs.onPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                      label: const Text(
+                        'Upload Photo',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  OutlinedButton.icon(
+                    onPressed: onRetry,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text(
+                      'Retry',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        _ => Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: cs.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: cs.primary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Loading Face Profile',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Checking protected employee biometric profile…',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+      },
     );
   }
 }

@@ -394,13 +394,17 @@ class MobileAttendanceApi implements MobileAttendanceService {
     final touchpoints = touchpointsList.whereType<Map>().map((tp) {
       final tpm = Map<String, dynamic>.from(tp);
       final deviceMap = tpm['device'] is Map ? Map<String, dynamic>.from(tpm['device']) : {};
+      final rawMatch = tpm['match_percentage'] ?? tpm['similarity_score'] ?? tpm['similarity'];
+      final rawSimilarity = tpm['similarity_score'] ?? tpm['match_score'] ?? tpm['similarity'];
       return PunchTouchpoint(
         number: _int(tpm['touchpoint_number'], fallback: 1),
         time: _string(tpm['time'], fallback: '--:--'),
         statusTag: _string(tpm['status_tag'], fallback: 'Touchpoint'),
         title: _string(tpm['title'], fallback: 'Punch Event'),
         location: _string(tpm['location'], fallback: 'Office Perimeter'),
-        deviceLabel: _string(deviceMap['label'], fallback: 'Mobile Device'),
+        deviceLabel: _string(deviceMap['display_label'] ?? deviceMap['label'] ?? deviceMap['model'], fallback: 'Mobile Device'),
+        matchPercentage: rawMatch is num ? rawMatch.toDouble() : (rawMatch is String ? double.tryParse(rawMatch) : null),
+        similarityScore: rawSimilarity is num ? rawSimilarity.toDouble() : (rawSimilarity is String ? double.tryParse(rawSimilarity) : null),
       );
     }).toList(growable: false);
 

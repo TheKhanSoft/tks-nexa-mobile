@@ -185,9 +185,9 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
 
   static PunchDetailData _mergeRecordDetail(AttendanceRecord record, PunchDetailData detail) {
     final dynamicDetail = _buildDynamicDetail(record);
-    final chosenTouchpoints = dynamicDetail.touchpoints.isNotEmpty
-        ? dynamicDetail.touchpoints
-        : (detail.touchpoints.isNotEmpty ? detail.touchpoints : const <PunchTouchpoint>[]);
+    final chosenTouchpoints = detail.touchpoints.isNotEmpty
+        ? detail.touchpoints
+        : dynamicDetail.touchpoints;
 
     final hasAnyPunches = chosenTouchpoints.isNotEmpty;
 
@@ -519,8 +519,9 @@ class _PunchDetailBody extends StatelessWidget {
         // Actions
         FilledButton.icon(
           onPressed: () {
+            final targetDate = record.date;
             Navigator.of(context).pop();
-            RegularizationRequestBottomSheet.show(context);
+            RegularizationRequestBottomSheet.show(context, initialDate: targetDate);
           },
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(54),
@@ -612,9 +613,35 @@ class _TimelineNode extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(tp.time, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                      const Spacer(),
+                      if (tp.matchPercentage != null) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.verified_user_rounded, size: 11, color: Color(0xFF059669)),
+                              const SizedBox(width: 3.5),
+                              Text(
+                                '${tp.matchPercentage!.toStringAsFixed(tp.matchPercentage! % 1 == 0 ? 0 : 1)}% Match',
+                                style: const TextStyle(
+                                  color: Color(0xFF047857),
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),

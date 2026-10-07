@@ -51,7 +51,11 @@ class AttendanceHistoryScreen extends ConsumerWidget {
                   is24Hour: is24Hour,
                 ),
                 const SizedBox(height: 24),
-                const _RegularizationButton(),
+                _RegularizationButton(
+                  defaultDate: history.records.isNotEmpty
+                      ? history.records.first.date
+                      : null,
+                ),
               ],
             ),
           ),
@@ -341,6 +345,12 @@ int _parseMins(String text) {
 /// Minutes → "Xh Ym"
 String _fmtMins(int mins) =>
     '${mins ~/ 60}h ${(mins % 60).toString().padLeft(2, '0')}m';
+
+/// Full day name → "Wed", "Tue", etc.
+String _shortDayName(String full) {
+  if (full.length <= 3) return full;
+  return full.substring(0, 3);
+}
 
 /// DateTime → "Jan 5" (day-of-month, no leading zero)
 String _shortDate(DateTime d) {
@@ -847,7 +857,7 @@ class _DailyActivityTile extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '${record.dayName}, ${_shortDate(record.date)}',
+                                    '${_shortDayName(record.dayName)}, ${_shortDate(record.date)}',
                                     style: theme.textTheme.titleMedium
                                         ?.copyWith(
                                       fontWeight: FontWeight.w900,
@@ -929,34 +939,64 @@ class _DailyActivityTile extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 11),
-                        // View punch & location — shown on every tile.
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: InkWell(
-                            onTap: () =>
-                                ShiftDetailBottomSheet.show(context, record),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 2, vertical: 3),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.location_on_outlined,
-                                      size: 14, color: cs.primary),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'View Punch & Location',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      color: cs.primary,
+                        // Action row: Regularize & View Punch & Location
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            InkWell(
+                              onTap: () => RegularizationRequestBottomSheet.show(
+                                context,
+                                initialDate: record.date,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 3),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.edit_calendar_outlined,
+                                        size: 13, color: cs.primary),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Regularize',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: cs.primary,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(width: 14),
+                            InkWell(
+                              onTap: () =>
+                                  ShiftDetailBottomSheet.show(context, record),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 2, vertical: 3),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.location_on_outlined,
+                                        size: 14, color: cs.primary),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'View Punch & Location',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: cs.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1081,7 +1121,9 @@ class _MilestoneBanner extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RegularizationButton extends StatelessWidget {
-  const _RegularizationButton();
+  const _RegularizationButton({this.defaultDate});
+
+  final DateTime? defaultDate;
 
   @override
   Widget build(BuildContext context) {
@@ -1100,7 +1142,10 @@ class _RegularizationButton extends StatelessWidget {
         ],
       ),
       child: FilledButton.icon(
-        onPressed: () => RegularizationRequestBottomSheet.show(context),
+        onPressed: () => RegularizationRequestBottomSheet.show(
+          context,
+          initialDate: defaultDate,
+        ),
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(56),
           backgroundColor: cs.primary,
