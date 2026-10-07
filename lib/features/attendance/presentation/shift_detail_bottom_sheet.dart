@@ -120,7 +120,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
           matchPercentage: record.trustScore != null ? record.trustScore!.toDouble() : 88.0,
         ),
-      if (outTime != null && outTime.isNotEmpty && outTime != '--:--' && outTime != 'Pending' && outTime != inTime)
+      if (outTime != null && outTime.isNotEmpty && outTime != '--:--' && outTime != 'Pending')
         PunchTouchpoint(
           number: 2,
           time: outTime,
@@ -168,7 +168,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
               ipStamp: 'Verified Telemetry',
             )
           : const GeofenceAudit(
-              status: 'No Punch Logged',
+              status: 'No Check-in Logged',
               perimeterDetails: 'No mobile attendance recorded for this date.',
               hardwareDisplay: 'No hardware registered',
               networkGateway: 'No active gateway',
@@ -180,7 +180,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
         approverTitle: 'Line Manager • Approver',
         note: hasPunches
             ? 'Attendance record verified and logged successfully.'
-            : 'No attendance punch recorded for this date.',
+            : 'No attendance check-in recorded for this date.',
       ),
     );
   }
@@ -359,7 +359,7 @@ class _PunchDetailBody extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Punch Log Timeline',
+              'Attendance Activity Timeline',
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
             ),
             Container(
@@ -390,7 +390,7 @@ class _PunchDetailBody extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'No punches recorded for this date',
+                        'No check in/out records for this date',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
                       const SizedBox(height: 2),
@@ -530,7 +530,7 @@ class _PunchDetailBody extends StatelessWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           ),
           icon: const Icon(Icons.edit_calendar_rounded),
-          label: const Text('Request Punch Regularization', style: TextStyle(fontWeight: FontWeight.w900)),
+          label: const Text('Request Attendance Regularization', style: TextStyle(fontWeight: FontWeight.w900)),
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(

@@ -789,8 +789,17 @@ class _DailyActivityTile extends StatelessWidget {
     final style = _StatusStyle.of(record.status, cs);
 
     final inTime = record.firstInFormatted ?? record.firstIn ?? '--:--';
-    final rawOut = record.lastOutFormatted ?? record.lastOut;
-    final outTime = (rawOut != null && rawOut != inTime && rawOut != '--:--') ? rawOut : '--:--';
+    final outTime = (record.lastOutFormatted != null &&
+            record.lastOutFormatted!.isNotEmpty &&
+            record.lastOutFormatted != '--:--' &&
+            record.lastOutFormatted != 'Pending')
+        ? record.lastOutFormatted!
+        : (record.lastOut != null &&
+                record.lastOut!.isNotEmpty &&
+                record.lastOut != '--:--' &&
+                record.lastOut != 'Pending')
+            ? record.lastOut!
+            : '--:--';
     // Leave records label the third cell "Worked", not "Net Duration".
     final durationLabel = record.isOnLeave ? 'Worked' : 'Net Duration';
 
@@ -914,16 +923,16 @@ class _DailyActivityTile extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: _TimeCell(
-                                  label: 'Punch In',
+                                  label: 'Check In',
                                   value: inTime,
-                                  // Late punch-in renders in amber.
+                                  // Late check-in renders in amber.
                                   valueColor:
                                   record.isLate ? _SC.warning : null,
                                 ),
                               ),
                               Expanded(
                                 child: _TimeCell(
-                                  label: 'Punch Out',
+                                  label: 'Check Out',
                                   value: outTime,
                                 ),
                               ),
@@ -939,7 +948,7 @@ class _DailyActivityTile extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 11),
-                        // Action row: Regularize & View Punch & Location
+                        // Action row: Regularize & View Check In/Out & Location
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
@@ -985,7 +994,7 @@ class _DailyActivityTile extends StatelessWidget {
                                         size: 14, color: cs.primary),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'View Punch & Location',
+                                      'View Check In/Out & Location',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w800,
@@ -1154,7 +1163,7 @@ class _RegularizationButton extends StatelessWidget {
         ),
         icon: const Icon(Icons.edit_calendar_rounded, size: 20),
         label: const Text(
-          'Regularization / Missed Punch Request',
+          'Regularization / Missed Check In/Out Request',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14.5),
@@ -1329,7 +1338,7 @@ class _StatusStyle {
         label: 'Absent',
         icon: Icons.cancel_rounded,
         placeIcon: Icons.event_busy_rounded,
-        placeFallback: 'No punch recorded',
+        placeFallback: 'No check-in recorded',
       );
     }
     if (s.contains('wfh') ||
@@ -1424,7 +1433,7 @@ class _EmptyHistoryCard extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
           const SizedBox(height: 4),
           Text(
-            'No timesheet punch logs found for this period.',
+            'No attendance check in/out logs found for this period.',
             textAlign: TextAlign.center,
             style: TextStyle(color: cs.onSurfaceVariant),
           ),

@@ -116,12 +116,12 @@ class _RegularizationRequestBottomSheetState
               ),
               const SizedBox(height: 18),
               const Text(
-                'Regularization / Missed Punch Request',
+                'Regularization / Missed Check In/Out Request',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.3),
               ),
               const SizedBox(height: 6),
               Text(
-                'Submit an attendance correction for missed punches or grace deductions.',
+                'Submit an attendance correction for missed check in/out or grace deductions.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                   fontWeight: FontWeight.w600,
@@ -149,7 +149,7 @@ class _RegularizationRequestBottomSheetState
               // Punch Type Dropdown
               DropdownButtonFormField<String>(
                 value: _punchType,
-                decoration: const InputDecoration(labelText: 'Missed Punch Type'),
+                decoration: const InputDecoration(labelText: 'Missed Attendance Type'),
                 items: const [
                   DropdownMenuItem(value: 'check_in', child: Text('Missed Check-In')),
                   DropdownMenuItem(value: 'check_out', child: Text('Missed Check-Out')),

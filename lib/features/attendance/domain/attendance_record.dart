@@ -42,6 +42,7 @@ class AttendanceRecord {
     this.latitude,
     this.longitude,
     this.trustScore,
+    this.verificationCount = 0,
   });
 
   final String id;
@@ -62,6 +63,7 @@ class AttendanceRecord {
   final double? latitude;
   final double? longitude;
   final int? trustScore;
+  final int verificationCount;
 
   bool get isPresent =>
       status.toLowerCase().contains('present') ||
@@ -86,8 +88,8 @@ class AttendanceRecord {
       if (firstIn != null && lastOut == null) return 'In Progress';
       return '--';
     }
-    final inDt = _parseTime(firstInFormatted ?? firstIn!);
-    final outDt = _parseTime(lastOutFormatted ?? lastOut!);
+    final inDt = parseTime(firstInFormatted ?? firstIn!);
+    final outDt = parseTime(lastOutFormatted ?? lastOut!);
     if (inDt == null || outDt == null) return '--';
 
     var diff = outDt.difference(inDt);
@@ -99,26 +101,36 @@ class AttendanceRecord {
     return '${hours}h ${mins.toString().padLeft(2, '0')}m';
   }
 
-  static DateTime? _parseTime(String timeStr) {
+  static DateTime? parseTime(String timeStr) {
     try {
       final s = timeStr.trim();
       final dateToday = DateTime.now();
 
-      final match12 = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', caseSensitive: false).firstMatch(s);
+      // Check ISO string
+      if (s.contains('T') || (s.length >= 10 && s.contains('-'))) {
+        final parsed = DateTime.tryParse(s);
+        if (parsed != null) return parsed;
+      }
+
+      // Check 12-hour format with optional seconds: e.g. 09:15 AM or 09:15:30 AM
+      final match12 = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$', caseSensitive: false).firstMatch(s);
       if (match12 != null) {
         var hour = int.parse(match12.group(1)!);
         final min = int.parse(match12.group(2)!);
-        final period = match12.group(3)!.toUpperCase();
+        final sec = match12.group(3) != null ? int.parse(match12.group(3)!) : 0;
+        final period = match12.group(4)!.toUpperCase();
         if (period == 'PM' && hour < 12) hour += 12;
         if (period == 'AM' && hour == 12) hour = 0;
-        return DateTime(dateToday.year, dateToday.month, dateToday.day, hour, min);
+        return DateTime(dateToday.year, dateToday.month, dateToday.day, hour, min, sec);
       }
 
+      // Check 24-hour format: e.g. 14:30 or 14:30:15
       final parts = s.split(':');
       if (parts.length >= 2) {
-        final hour = int.parse(parts[0]);
-        final min = int.parse(parts[1]);
-        return DateTime(dateToday.year, dateToday.month, dateToday.day, hour, min);
+        final hour = int.parse(parts[0].trim());
+        final min = int.parse(parts[1].trim());
+        final sec = parts.length >= 3 ? int.tryParse(parts[2].trim()) ?? 0 : 0;
+        return DateTime(dateToday.year, dateToday.month, dateToday.day, hour, min, sec);
       }
     } catch (_) {}
     return null;

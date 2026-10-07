@@ -686,7 +686,7 @@ class _TodaysAttendanceCard extends ConsumerWidget {
                     ? const Color(0xFF10B981)
                     : (todayRec.isLate ? const Color(0xFFF59E0B) : const Color(0xFF2563EB)),
                 todayRec.isPresent ? Icons.check_circle_rounded : Icons.access_time_filled_rounded,
-                'Punch In: ${todayRec.firstInFormatted} · ${(todayRec.lastOutFormatted != null && todayRec.lastOutFormatted != todayRec.firstInFormatted) ? 'Punch Out: ${todayRec.lastOutFormatted}' : 'Checked In (Active)'}',
+                'Check In: ${todayRec.firstInFormatted} · ${(todayRec.lastOutFormatted != null && todayRec.lastOutFormatted != todayRec.firstInFormatted) ? 'Check Out: ${todayRec.lastOutFormatted}' : 'Checked In (Active)'}',
               )
             : _getTodayStatusInfo(profile);
 
@@ -911,7 +911,7 @@ class _TodaysAttendanceCard extends ConsumerWidget {
                                 const Row(
                                   children: [
                                     Text(
-                                      'Verified Live Punch',
+                                      'Verified Live Attendance',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 14,
@@ -1026,7 +1026,7 @@ class _TodaysAttendanceCard extends ConsumerWidget {
                         onPressed: onMarkAttendance,
                         icon: const Icon(Icons.face_retouching_natural_rounded, size: 20),
                         label: const Text(
-                          'Verify Face & Punch Attendance',
+                          'Verify Face & Mark Attendance',
                           style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 14,
@@ -1157,7 +1157,7 @@ class _TodaysAttendanceCard extends ConsumerWidget {
       'NOT MARKED',
       const Color(0xFFF59E0B),
       Icons.pending_actions_rounded,
-      'Pending punch for today\'s shift.'
+      'Pending check-in for today\'s shift.'
     );
   }
 
@@ -1327,7 +1327,7 @@ class _RecentAttendanceSection extends ConsumerWidget {
         status: 'PENDING',
         color: const Color(0xFFF59E0B),
         icon: Icons.pending_actions_rounded,
-        subtitle: '$shiftName · Awaiting punch',
+        subtitle: '$shiftName · Awaiting check-in',
         timeRange: 'Not marked yet',
         capturedPhotoUrl: null,
       ));
@@ -1753,7 +1753,7 @@ Widget _cameraImageFallback(Color accentColor) {
           ),
           const SizedBox(height: 3),
           const Text(
-            'Verified Punch',
+            'Verified Check-in',
             style: TextStyle(
               color: Colors.white,
               fontSize: 10,
@@ -1970,7 +1970,7 @@ void _showPunchDetailModal({
                         children: [
                           _buildTelemetryRow(
                             icon: Icons.access_time_rounded,
-                            label: 'Punch Timing',
+                            label: 'Attendance Time',
                             value: item.timeRange,
                             valueColor: item.color,
                           ),

@@ -55,15 +55,40 @@ class AttendanceRecordDto {
           groupedMap[dateKey] = record;
         } else {
           final existing = groupedMap[dateKey]!;
-          final earliestIn = _compareTimes(existing.firstInFormatted, record.firstInFormatted, isEarliest: true);
-          final latestOut = _compareTimes(existing.lastOutFormatted, record.lastOutFormatted, isEarliest: false);
-          final effectiveOut = (latestOut != null && latestOut != earliestIn) ? latestOut : null;
+
+          // Collect all punch timestamps available across both records
+          final allTimes = <String>[
+            if (existing.firstInFormatted != null && existing.firstInFormatted != '--:--' && existing.firstInFormatted != 'Pending') existing.firstInFormatted!,
+            if (existing.lastOutFormatted != null && existing.lastOutFormatted != '--:--' && existing.lastOutFormatted != 'Pending') existing.lastOutFormatted!,
+            if (record.firstInFormatted != null && record.firstInFormatted != '--:--' && record.firstInFormatted != 'Pending') record.firstInFormatted!,
+            if (record.lastOutFormatted != null && record.lastOutFormatted != '--:--' && record.lastOutFormatted != 'Pending') record.lastOutFormatted!,
+          ];
+
+          String? earliestIn = existing.firstInFormatted ?? record.firstInFormatted;
+          String? latestOut = record.lastOutFormatted ?? existing.lastOutFormatted;
+
+          if (allTimes.length >= 2) {
+            allTimes.sort((a, b) {
+              final da = AttendanceRecord.parseTime(a);
+              final db = AttendanceRecord.parseTime(b);
+              if (da == null || db == null) return a.compareTo(b);
+              return da.compareTo(db);
+            });
+            earliestIn = allTimes.first;
+            latestOut = allTimes.last;
+          }
+
+          final combinedCount = existing.verificationCount +
+              (record.verificationCount > 0 ? record.verificationCount : 1);
+          final hasMultiple = combinedCount >= 2 || allTimes.length >= 2;
+          final effectiveOut = hasMultiple ? latestOut : null;
+
           groupedMap[dateKey] = AttendanceRecord(
             id: existing.id,
             date: existing.date,
             dayName: existing.dayName,
             status: existing.isPresent ? existing.status : record.status,
-            firstIn: existing.firstIn,
+            firstIn: existing.firstIn ?? record.firstIn,
             firstInFormatted: earliestIn,
             lastOut: effectiveOut,
             lastOutFormatted: effectiveOut,
@@ -76,6 +101,7 @@ class AttendanceRecordDto {
             latitude: record.latitude ?? existing.latitude,
             longitude: record.longitude ?? existing.longitude,
             trustScore: record.trustScore ?? existing.trustScore,
+            verificationCount: combinedCount,
           );
         }
       }
@@ -150,16 +176,59 @@ class AttendanceRecordDto {
         : null;
 
     final status = _string(map['status'], fallback: 'Present');
-    final firstIn = _string(map['first_in'], fallback: _string(map['punch_in']));
-    final firstInFormatted = _string(map['first_in_formatted'], fallback: _string(map['check_in_time']));
-    final rawLastOut = _string(map['last_out'], fallback: _string(map['punch_out']));
-    final rawLastOutFormatted = _string(map['last_out_formatted'], fallback: _string(map['check_out_time']));
+    final verificationCount = _int(map['verification_count'], fallback: _int(map['total_scans']));
+    final rawScans = map['scans'] is List ? (map['scans'] as List).whereType<Map>().toList() : <Map>[];
 
-    // Checkout time should never be identical to checkin time; if no distinct checkout occurred, it must be null
-    final isSameAsCheckIn = (rawLastOut.isNotEmpty && rawLastOut == firstIn) ||
-        (rawLastOutFormatted.isNotEmpty && (rawLastOutFormatted == firstInFormatted || rawLastOutFormatted == firstIn));
-    final lastOut = (!isSameAsCheckIn && rawLastOut.isNotEmpty) ? rawLastOut : null;
-    final lastOutFormatted = (!isSameAsCheckIn && rawLastOutFormatted.isNotEmpty) ? rawLastOutFormatted : null;
+    var firstIn = _string(map['first_in'], fallback: _string(map['punch_in']));
+    var firstInFormatted = _string(map['first_in_formatted'], fallback: _string(map['check_in_time']));
+    var rawLastOut = _string(map['last_out'], fallback: _string(map['punch_out']));
+    var rawLastOutFormatted = _string(map['last_out_formatted'], fallback: _string(map['check_out_time']));
+
+    // If map is a single raw punch log (e.g. from data['data']), extract its time as the first punch
+    final singleLogTime = _string(map['formatted_time'], fallback: _string(map['time']));
+    final singleLogRawTime = _string(map['timestamp'], fallback: _string(map['time_raw']));
+    if (firstInFormatted.isEmpty && singleLogTime.isNotEmpty) {
+      firstInFormatted = singleLogTime;
+      firstIn = singleLogRawTime.isNotEmpty ? singleLogRawTime : singleLogTime;
+    }
+
+    // If scans list is provided and has >= 2 punches, guarantee check-in and check-out are captured
+    if (rawScans.length >= 2) {
+      final firstScan = rawScans.first;
+      final lastScan = rawScans.last;
+      firstInFormatted = _string(firstScan['time'], fallback: firstInFormatted);
+      firstIn = _string(firstScan['time_raw'], fallback: firstIn);
+      rawLastOutFormatted = _string(lastScan['time'], fallback: rawLastOutFormatted);
+      rawLastOut = _string(lastScan['time_raw'], fallback: rawLastOut);
+    }
+
+    final hasMultiplePunches = verificationCount >= 2 || rawScans.length >= 2;
+
+    // Check Out resolution:
+    // When multiple punches are available, the last punch is unconditionally considered as Check Out.
+    // If only one punch occurred (no checkout yet), checkout must be null (rendered as --:-- in the UI).
+    String? lastOut;
+    String? lastOutFormatted;
+
+    if (hasMultiplePunches) {
+      if (rawLastOutFormatted.isNotEmpty && rawLastOutFormatted != '--:--' && rawLastOutFormatted != 'Pending') {
+        lastOutFormatted = rawLastOutFormatted;
+        lastOut = rawLastOut.isNotEmpty ? rawLastOut : rawLastOutFormatted;
+      } else if (rawLastOut.isNotEmpty && rawLastOut != '--:--' && rawLastOut != 'Pending') {
+        lastOut = rawLastOut;
+        lastOutFormatted = rawLastOut;
+      }
+    } else {
+      // If only 1 punch occurred, check if there's an explicit distinct last_out
+      final isDistinctOut = rawLastOutFormatted.isNotEmpty &&
+          rawLastOutFormatted != firstInFormatted &&
+          rawLastOutFormatted != '--:--' &&
+          rawLastOutFormatted != 'Pending';
+      if (isDistinctOut) {
+        lastOutFormatted = rawLastOutFormatted;
+        lastOut = rawLastOut.isNotEmpty ? rawLastOut : rawLastOutFormatted;
+      }
+    }
 
     return AttendanceRecord(
       id: _string(map['id'], fallback: date.toIso8601String().split('T').first),
@@ -199,13 +268,8 @@ class AttendanceRecordDto {
       latitude: _double(coordsMap?['latitude']),
       longitude: _double(coordsMap?['longitude']),
       trustScore: _int(map['trust_score'], fallback: _int(map['trust'])),
+      verificationCount: verificationCount > 0 ? verificationCount : (rawScans.isNotEmpty ? rawScans.length : 1),
     );
-  }
-
-  static String? _compareTimes(String? t1, String? t2, {required bool isEarliest}) {
-    if (t1 == null || t1 == '--:--' || t1 == 'Pending') return t2;
-    if (t2 == null || t2 == '--:--' || t2 == 'Pending') return t1;
-    return isEarliest ? (t1.compareTo(t2) <= 0 ? t1 : t2) : (t1.compareTo(t2) >= 0 ? t1 : t2);
   }
 
   static String _dayName(DateTime date) {
