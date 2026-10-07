@@ -125,6 +125,13 @@ class _ProfileContent extends StatelessWidget {
               title: 'Contact',
               accent: colorScheme.tertiary,
               items: [
+                if (profile.username.isNotEmpty)
+                  (
+                    'Username',
+                    profile.username.startsWith('@')
+                        ? profile.username
+                        : '@${profile.username}',
+                  ),
                 ('Email', profile.email),
                 ('Mobile number', profile.mobileNumber),
               ],
@@ -298,24 +305,22 @@ class _PersonalProfileHero extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        if (profile.employeeCode.isNotEmpty) ...[
-                          _HeaderBadge(
-                            icon: Icons.badge_outlined,
-                            label: profile.employeeCode,
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (profile.username.isNotEmpty)
-                          _HeaderBadge(
-                            icon: Icons.alternate_email_rounded,
-                            label: profile.username,
-                          ),
-                      ],
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (profile.employeeCode.isNotEmpty)
+                        _HeaderBadge(
+                          icon: Icons.badge_outlined,
+                          label: profile.employeeCode,
+                        ),
+                      if (profile.username.isNotEmpty)
+                        _HeaderBadge(
+                          icon: Icons.alternate_email_rounded,
+                          label: profile.username,
+                        ),
+                    ],
                   ),
                 ],
               );
@@ -1470,22 +1475,38 @@ class _HeaderBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .14),
-        borderRadius: BorderRadius.circular(999),
+        color: Colors.white.withValues(alpha: .18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: .28),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: .08),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white70, size: 15),
+          Icon(icon, color: Colors.white.withValues(alpha: .9), size: 14),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.1,
+              ),
             ),
           ),
         ],

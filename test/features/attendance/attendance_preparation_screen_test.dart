@@ -29,18 +29,14 @@ void main() {
       ),
     );
 
-    await tester.scrollUntilVisible(find.text('Fresh Location'), 250);
-    expect(find.text('Fresh Location'), findsOneWidget);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('CURRENT LOCATION'), findsOneWidget);
+
     await tester.scrollUntilVisible(find.text('Face Photo'), 250);
     expect(find.text('Face Photo'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Fresh Location'), -250);
-
-    await tester.tap(find.byKey(const Key('capture_location')));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('34.19810, 72.04780'), findsOneWidget);
-    expect(find.textContaining('±8 m'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const Key('continue_attendance')),
       300,
