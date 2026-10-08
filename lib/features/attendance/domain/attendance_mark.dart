@@ -114,6 +114,7 @@ class AttendanceMarkResult {
     this.attendanceId,
     this.recordedAt,
     this.type,
+    this.similarityScore,
     this.trustScore,
     this.trustLevel,
     this.cameraCorroboration,
@@ -123,6 +124,7 @@ class AttendanceMarkResult {
   final String? attendanceId;
   final DateTime? recordedAt;
   final AttendanceType? type;
+  final double? similarityScore;
   final int? trustScore;
   final String? trustLevel;
   final CameraCorroborationResult? cameraCorroboration;

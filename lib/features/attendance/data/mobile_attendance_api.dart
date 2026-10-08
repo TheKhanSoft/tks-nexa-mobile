@@ -160,6 +160,7 @@ class MobileAttendanceApi implements MobileAttendanceService {
             ? DateTime.tryParse(rawRecordedAt)?.toLocal()
             : null,
         type: type,
+        similarityScore: _similarityScore(data),
         trustScore: _trustScore(data),
         trustLevel: _trustLevel(data),
         cameraCorroboration:
@@ -172,6 +173,13 @@ class MobileAttendanceApi implements MobileAttendanceService {
         diagnosticCode: 'ATTENDANCE_RESPONSE_INVALID',
       );
     }
+  }
+
+  static double? _similarityScore(Map<String, dynamic> data) {
+    final direct = data['similarity_score'] ?? data['similarity'] ?? data['match_score'];
+    if (direct is num) return direct.toDouble();
+    if (direct is String) return double.tryParse(direct);
+    return null;
   }
 
   static int? _trustScore(Map<String, dynamic> data) {

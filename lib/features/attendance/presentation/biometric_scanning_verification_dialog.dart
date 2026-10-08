@@ -492,23 +492,36 @@ class _BiometricScanningVerificationDialogState
                   ),
                 ),
               ),
-            if (result?.trustScore != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white24),
-                ),
-                child: Text(
-                  'Trust: ${result!.trustScore}% (${result.trustLevel ?? 'High'})',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+            Builder(
+              builder: (context) {
+                final simScore = result?.similarityScore;
+                final displayScore = (simScore != null && simScore > 0)
+                    ? simScore
+                    : (result?.trustScore != null ? result!.trustScore!.toDouble() : null);
+                if (displayScore != null) {
+                  final formatted = displayScore % 1 == 0
+                      ? displayScore.toInt().toString()
+                      : displayScore.toStringAsFixed(1);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Text(
+                      'Similarity: $formatted%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
           ],
         ),
         const SizedBox(height: 20),

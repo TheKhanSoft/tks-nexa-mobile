@@ -65,6 +65,7 @@ void main() {
               resultToReturn: const AttendanceMarkResult(
                 message: 'Attendance recorded successfully.',
                 attendanceId: '99',
+                similarityScore: 94.0,
                 trustScore: 94,
                 trustLevel: 'high',
                 type: AttendanceType.checkIn,
@@ -96,7 +97,7 @@ void main() {
     expect(find.text('VERIFICATION CONFIRMED'), findsOneWidget);
     expect(find.text('Identity Verified!'), findsOneWidget);
     expect(find.text('CHECK IN'), findsOneWidget);
-    expect(find.text('Trust: 94% (high)'), findsOneWidget);
+    expect(find.text('Similarity: 94%'), findsOneWidget);
     expect(find.byKey(const Key('verification_done_button')), findsOneWidget);
   });
 

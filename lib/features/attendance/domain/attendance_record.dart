@@ -28,6 +28,7 @@ class AttendanceRecord {
     required this.date,
     required this.dayName,
     required this.status,
+    bool isLate = false,
     this.firstIn,
     this.firstInFormatted,
     this.lastOut,
@@ -43,12 +44,14 @@ class AttendanceRecord {
     this.longitude,
     this.trustScore,
     this.verificationCount = 0,
-  });
+  // ignore: prefer_initializing_formals
+  }) : _isLate = isLate;
 
   final String id;
   final DateTime date;
   final String dayName;
   final String status;
+  final bool _isLate;
   final String? firstIn;
   final String? firstInFormatted;
   final String? lastOut;
@@ -68,8 +71,9 @@ class AttendanceRecord {
   bool get isPresent =>
       status.toLowerCase().contains('present') ||
       status.toLowerCase().contains('accepted') ||
-      status.toLowerCase().contains('matched');
-  bool get isLate => status.toLowerCase().contains('late');
+      status.toLowerCase().contains('matched') ||
+      isLate;
+  bool get isLate => _isLate || status.toLowerCase().contains('late');
   bool get isHalfDay => status.toLowerCase().contains('half');
   bool get isOnLeave => status.toLowerCase().contains('leave');
   bool get isOfficialDuty => status.toLowerCase().contains('duty');

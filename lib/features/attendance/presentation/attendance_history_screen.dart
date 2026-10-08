@@ -652,7 +652,7 @@ class _RhythmCard extends StatelessWidget {
               final record = byDay[_dayKey(day)];
               final statusColor = record == null
                   ? null
-                  : _StatusStyle.of(record.status, cs).color;
+                  : _StatusStyle.of(record.status, cs, isLate: record.isLate).color;
               return _RhythmDay(
                 label: _dayLabels[i],
                 dateNum: day.day,
@@ -786,7 +786,7 @@ class _DailyActivityTile extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final style = _StatusStyle.of(record.status, cs);
+    final style = _StatusStyle.of(record.status, cs, isLate: record.isLate);
 
     final inTime = record.firstInFormatted ?? record.firstIn ?? '--:--';
     final outTime = (record.lastOutFormatted != null &&
@@ -1289,8 +1289,19 @@ class _StatusStyle {
   final IconData placeIcon;
   final String placeFallback;
 
-  factory _StatusStyle.of(String status, ColorScheme cs) {
+  factory _StatusStyle.of(String status, ColorScheme cs, {bool isLate = false}) {
     final s = status.toLowerCase();
+
+    // Check Late first so it overrides generic present status
+    if (isLate || s.contains('late')) {
+      return const _StatusStyle(
+        color: _SC.warning,
+        label: 'Late Arrival',
+        icon: Icons.access_time_filled_rounded,
+        placeIcon: Icons.business_rounded,
+        placeFallback: 'HQ Office',
+      );
+    }
 
     if (s.contains('present') ||
         s.contains('accepted') ||
@@ -1299,15 +1310,6 @@ class _StatusStyle {
         color: _SC.success,
         label: 'Present - On Time',
         icon: Icons.check_circle_rounded,
-        placeIcon: Icons.business_rounded,
-        placeFallback: 'HQ Office',
-      );
-    }
-    if (s.contains('late')) {
-      return const _StatusStyle(
-        color: _SC.warning,
-        label: 'Late Arrival',
-        icon: Icons.access_time_filled_rounded,
         placeIcon: Icons.business_rounded,
         placeFallback: 'HQ Office',
       );

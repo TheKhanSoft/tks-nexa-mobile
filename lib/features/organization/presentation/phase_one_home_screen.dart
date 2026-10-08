@@ -682,10 +682,10 @@ class _TodaysAttendanceCard extends ConsumerWidget {
         hasMarkedToday
             ? (
                 todayRec.status.toUpperCase(),
-                todayRec.isPresent
-                    ? const Color(0xFF10B981)
-                    : (todayRec.isLate ? const Color(0xFFF59E0B) : const Color(0xFF2563EB)),
-                todayRec.isPresent ? Icons.check_circle_rounded : Icons.access_time_filled_rounded,
+                todayRec.isLate
+                    ? const Color(0xFFF59E0B)
+                    : (todayRec.isPresent ? const Color(0xFF10B981) : const Color(0xFF2563EB)),
+                todayRec.isLate ? Icons.access_time_filled_rounded : Icons.check_circle_rounded,
                 'Check In: ${todayRec.firstInFormatted} · ${(todayRec.lastOutFormatted != null && todayRec.lastOutFormatted != todayRec.firstInFormatted) ? 'Check Out: ${todayRec.lastOutFormatted}' : 'Checked In (Active)'}',
               )
             : _getTodayStatusInfo(profile);
@@ -1306,12 +1306,12 @@ class _RecentAttendanceSection extends ConsumerWidget {
       days.add(_RecentDayItem(
         date: now,
         status: todayRec.status.toUpperCase(),
-        color: isPres
-            ? const Color(0xFF10B981)
-            : (isLate ? const Color(0xFFF59E0B) : const Color(0xFF2563EB)),
-        icon: isPres
-            ? Icons.check_circle_rounded
-            : (isLate ? Icons.access_time_filled_rounded : Icons.verified_user_rounded),
+        color: isLate
+            ? const Color(0xFFF59E0B)
+            : (isPres ? const Color(0xFF10B981) : const Color(0xFF2563EB)),
+        icon: isLate
+            ? Icons.access_time_filled_rounded
+            : (isPres ? Icons.check_circle_rounded : Icons.verified_user_rounded),
         subtitle:
             '${todayRec.shiftName.isNotEmpty ? todayRec.shiftName : shiftName} · ${todayRec.trustScore ?? 100}% Trust',
         timeRange:
@@ -1352,12 +1352,12 @@ class _RecentAttendanceSection extends ConsumerWidget {
 
       Color color;
       IconData icon;
-      if (isPres) {
-        color = const Color(0xFF10B981);
-        icon = Icons.check_circle_rounded;
-      } else if (isLate) {
+      if (isLate) {
         color = const Color(0xFFF59E0B);
         icon = Icons.access_time_filled_rounded;
+      } else if (isPres) {
+        color = const Color(0xFF10B981);
+        icon = Icons.check_circle_rounded;
       } else if (isDuty) {
         color = const Color(0xFF2563EB);
         icon = Icons.business_center_rounded;

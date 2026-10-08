@@ -83,11 +83,17 @@ class AttendanceRecordDto {
           final hasMultiple = combinedCount >= 2 || allTimes.length >= 2;
           final effectiveOut = hasMultiple ? latestOut : null;
 
+          final combinedIsLate = existing.isLate || record.isLate;
+          final combinedStatus = combinedIsLate
+              ? 'Late'
+              : (existing.isPresent ? existing.status : record.status);
+
           groupedMap[dateKey] = AttendanceRecord(
             id: existing.id,
             date: existing.date,
             dayName: existing.dayName,
-            status: existing.isPresent ? existing.status : record.status,
+            status: combinedStatus,
+            isLate: combinedIsLate,
             firstIn: existing.firstIn ?? record.firstIn,
             firstInFormatted: earliestIn,
             lastOut: effectiveOut,
@@ -119,11 +125,11 @@ class AttendanceRecordDto {
           if (!r.isOffDay && !r.isFutureOrUpcoming && isPastOrToday) {
             workDays++;
           }
-          if (r.isPresent) {
-            p++;
-          } else if (r.isLate) {
+          if (r.isLate) {
             p++;
             l++;
+          } else if (r.isPresent) {
+            p++;
           } else if (r.isHalfDay) {
             p++;
           } else if (r.isOnLeave) {
@@ -175,7 +181,16 @@ class AttendanceRecordDto {
         ? Map<String, dynamic>.from(deviceMap!['coordinates'])
         : null;
 
-    final status = _string(map['status'], fallback: 'Present');
+    final rawIsLate = map['is_late'] == true ||
+        map['late'] == true ||
+        map['isLate'] == true ||
+        map['is_late'] == 1 ||
+        map['late'] == 1 ||
+        _string(map['status']).toLowerCase().contains('late') ||
+        _string(map['status_label']).toLowerCase().contains('late');
+
+    var isLateResolved = rawIsLate;
+    var status = _string(map['status'], fallback: rawIsLate ? 'Late' : 'Present');
     final verificationCount = _int(map['verification_count'], fallback: _int(map['total_scans']));
     final rawScans = map['scans'] is List ? (map['scans'] as List).whereType<Map>().toList() : <Map>[];
 
@@ -200,6 +215,27 @@ class AttendanceRecordDto {
       firstIn = _string(firstScan['time_raw'], fallback: firstIn);
       rawLastOutFormatted = _string(lastScan['time'], fallback: rawLastOutFormatted);
       rawLastOut = _string(lastScan['time_raw'], fallback: rawLastOut);
+    }
+
+    // If shift_start is provided, verify against arrival grace period
+    if (!isLateResolved) {
+      final shiftStartStr = _string(map['shift_start']);
+      final graceMinutes = _int(map['grace_period_minutes'], fallback: 15);
+      final checkInTimeStr = firstInFormatted.isNotEmpty ? firstInFormatted : firstIn;
+      if (shiftStartStr.isNotEmpty && checkInTimeStr.isNotEmpty) {
+        final shiftStartDt = AttendanceRecord.parseTime(shiftStartStr);
+        final firstInDt = AttendanceRecord.parseTime(checkInTimeStr);
+        if (shiftStartDt != null && firstInDt != null) {
+          final graceCutoff = shiftStartDt.add(Duration(minutes: graceMinutes));
+          if (firstInDt.isAfter(graceCutoff)) {
+            isLateResolved = true;
+          }
+        }
+      }
+    }
+
+    if (isLateResolved && status.toLowerCase() == 'present') {
+      status = 'Late';
     }
 
     final hasMultiplePunches = verificationCount >= 2 || rawScans.length >= 2;
@@ -235,6 +271,7 @@ class AttendanceRecordDto {
       date: date,
       dayName: _string(map['day_name'], fallback: _dayName(date)),
       status: status,
+      isLate: isLateResolved,
       firstIn: firstIn.isNotEmpty ? firstIn : null,
       firstInFormatted: firstInFormatted.isNotEmpty ? firstInFormatted : (firstIn.isNotEmpty ? firstIn : null),
       lastOut: lastOut,

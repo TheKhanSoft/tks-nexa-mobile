@@ -278,13 +278,25 @@ class AttendanceSubmissionController
               snapshotBase64: snapshotBase64Payload,
             ),
           );
+      final resolvedResult = (result.similarityScore != null && result.similarityScore! > 0)
+          ? result
+          : AttendanceMarkResult(
+              message: result.message,
+              attendanceId: result.attendanceId,
+              recordedAt: result.recordedAt,
+              type: result.type,
+              similarityScore: verification.similarity * 100,
+              trustScore: result.trustScore,
+              trustLevel: result.trustLevel,
+              cameraCorroboration: result.cameraCorroboration,
+            );
       await ref.read(localSelfieStorageProvider).saveSelfie(
             imageBytes: capture.bytes,
             date: capturedAt,
-            type: result.type?.apiValue ?? 'check_in',
+            type: resolvedResult.type?.apiValue ?? 'check_in',
           );
-      state = AsyncData(result);
-      return result;
+      state = AsyncData(resolvedResult);
+      return resolvedResult;
     } on Object catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
       return null;
