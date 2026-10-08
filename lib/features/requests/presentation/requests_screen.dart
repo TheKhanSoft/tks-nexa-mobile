@@ -2,9 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/regularization_request_bottom_sheet.dart';
 import 'package:tks_nexa_attendance/features/requests/application/requests_providers.dart';
 import 'package:tks_nexa_attendance/features/requests/domain/leave_request.dart';
 import 'package:tks_nexa_attendance/features/requests/domain/official_duty_request.dart';
+import 'package:tks_nexa_attendance/features/requests/domain/regularization_request.dart';
 
 class RequestsScreen extends ConsumerStatefulWidget {
   const RequestsScreen({super.key});
@@ -20,7 +22,10 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -135,6 +140,32 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
                     ],
                   ),
                 ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Regularizations'),
+                      if (overviewAsync.value?.pendingRegularizationRequests case final count? when count > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$count',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -145,18 +176,27 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
         children: const [
           _LeaveRequestsTab(),
           _OfficialDutyRequestsTab(),
+          _RegularizationRequestsTab(),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           if (_tabController.index == 0) {
             _showApplyLeaveSheet(context);
-          } else {
+          } else if (_tabController.index == 1) {
             _showApplyOfficialDutySheet(context);
+          } else {
+            RegularizationRequestBottomSheet.show(context);
           }
         },
         icon: const Icon(Icons.add_rounded),
-        label: Text(_tabController.index == 0 ? 'Apply Leave' : 'New Duty Request'),
+        label: Text(
+          switch (_tabController.index) {
+            0 => 'Apply Leave',
+            1 => 'New Duty Request',
+            _ => 'Regularize Attendance',
+          },
+        ),
       ),
     );
   }
@@ -322,13 +362,13 @@ class _LeaveBalanceCard extends StatelessWidget {
   }
 }
 
-class _LeaveRequestTile extends StatelessWidget {
+class _LeaveRequestTile extends ConsumerWidget {
   const _LeaveRequestTile({required this.request});
 
   final LeaveRequest request;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final (statusColor, statusIcon) = _statusVisuals(request.status);
@@ -406,6 +446,32 @@ class _LeaveRequestTile extends StatelessWidget {
               ),
             ],
           ),
+          if (request.markedToName != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.forward_rounded, size: 14, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Forwarded/Marked to: ${request.markedToName}',
+                    style: const TextStyle(
+                      color: Color(0xFF6366F1),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3), height: 1),
           const SizedBox(height: 14),
@@ -413,11 +479,32 @@ class _LeaveRequestTile extends StatelessWidget {
             children: [
               const Icon(Icons.date_range_rounded, size: 16, color: Colors.grey),
               const SizedBox(width: 8),
-              Text(
-                request.formattedDates,
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              Expanded(
+                child: Text(
+                  request.formattedDates,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
               ),
-              const Spacer(),
+              if (request.approvedDaysCount != null &&
+                  request.isApproved &&
+                  request.approvedDaysCount != request.daysCount) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Granted: ${request.approvedDaysCount}d',
+                    style: const TextStyle(
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.w900,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -443,6 +530,25 @@ class _LeaveRequestTile extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
+          if (request.isCancelled && request.cancellationReason != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+              ),
+              child: Text(
+                'Cancellation reason: ${request.cancellationReason}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.red.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
           if (request.approvals.isNotEmpty) ...[
             const SizedBox(height: 14),
             Container(
@@ -472,6 +578,49 @@ class _LeaveRequestTile extends StatelessWidget {
               ),
             ),
           ],
+          if (request.canCancel || request.canReschedule) ...[
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (request.canReschedule) ...[
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (ctx) => _ChangeLeaveDatesDialog(request: request),
+                      );
+                    },
+                    icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                    label: const Text('Change Dates', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                if (request.canCancel) ...[
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (ctx) => _CancelLeaveDialog(request: request),
+                      );
+                    },
+                    icon: const Icon(Icons.cancel_outlined, size: 16, color: Color(0xFFEF4444)),
+                    label: const Text('Cancel Leave', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w800, fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFEF4444),
+                      side: const BorderSide(color: Color(0xFFEF4444)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -481,8 +630,265 @@ class _LeaveRequestTile extends StatelessWidget {
     final s = status.toLowerCase();
     if (s.contains('approved')) return (const Color(0xFF10B981), Icons.check_circle_rounded);
     if (s.contains('rejected')) return (const Color(0xFFEF4444), Icons.cancel_rounded);
+    if (s.contains('cancelled')) return (const Color(0xFF9CA3AF), Icons.cancel_outlined);
     if (s.contains('forwarded')) return (const Color(0xFF2563EB), Icons.forward_rounded);
     return (const Color(0xFFF59E0B), Icons.pending_actions_rounded);
+  }
+}
+
+class _CancelLeaveDialog extends ConsumerStatefulWidget {
+  const _CancelLeaveDialog({required this.request});
+  final LeaveRequest request;
+
+  @override
+  ConsumerState<_CancelLeaveDialog> createState() => _CancelLeaveDialogState();
+}
+
+class _CancelLeaveDialogState extends ConsumerState<_CancelLeaveDialog> {
+  final _reasonController = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() => _submitting = true);
+    try {
+      await ref.read(requestsApiProvider).cancelLeave(
+        widget.request.id,
+        reason: _reasonController.text.trim(),
+      );
+      if (!mounted) return;
+      ref.invalidate(leaveRequestsProvider);
+      ref.invalidate(leaveTypesProvider);
+      ref.invalidate(requestsOverviewProvider);
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Leave application cancelled successfully.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is AppFailure ? e.message : e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: const Row(
+        children: [
+          Icon(Icons.cancel_outlined, color: Color(0xFFEF4444)),
+          SizedBox(width: 10),
+          Text('Cancel Leave', style: TextStyle(fontWeight: FontWeight.w900)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Are you sure you want to cancel your leave request for ${widget.request.formattedDates} (${widget.request.leaveTypeName})?',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _reasonController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Reason for cancellation (optional)',
+              hintText: 'e.g., Plans changed, postponed',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Keep Leave'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+          child: _submitting
+              ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Confirm Cancel'),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChangeLeaveDatesDialog extends ConsumerStatefulWidget {
+  const _ChangeLeaveDatesDialog({required this.request});
+  final LeaveRequest request;
+
+  @override
+  ConsumerState<_ChangeLeaveDatesDialog> createState() => _ChangeLeaveDatesDialogState();
+}
+
+class _ChangeLeaveDatesDialogState extends ConsumerState<_ChangeLeaveDatesDialog> {
+  late DateTime _startDate;
+  late DateTime _endDate;
+  final _reasonController = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = widget.request.startDate;
+    _endDate = widget.request.endDate;
+  }
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() => _submitting = true);
+    final startStr =
+        '${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}';
+    final endStr =
+        '${_endDate.year}-${_endDate.month.toString().padLeft(2, '0')}-${_endDate.day.toString().padLeft(2, '0')}';
+
+    try {
+      await ref.read(requestsApiProvider).changeLeaveDates(
+        id: widget.request.id,
+        startDate: startStr,
+        endDate: endStr,
+        reason: _reasonController.text.trim(),
+      );
+      if (!mounted) return;
+      ref.invalidate(leaveRequestsProvider);
+      ref.invalidate(requestsOverviewProvider);
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Leave dates updated successfully.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is AppFailure ? e.message : e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final startStr =
+        '${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}-${_startDate.day.toString().padLeft(2, '0')}';
+    final endStr =
+        '${_endDate.year}-${_endDate.month.toString().padLeft(2, '0')}-${_endDate.day.toString().padLeft(2, '0')}';
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      title: const Row(
+        children: [
+          Icon(Icons.edit_calendar_rounded, color: Color(0xFF2563EB)),
+          SizedBox(width: 10),
+          Text('Change Leave Dates', style: TextStyle(fontWeight: FontWeight.w900)),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Adjust date range for ${widget.request.leaveTypeName}:',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final d = await showDatePicker(
+                      context: context,
+                      initialDate: _startDate,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (d != null) {
+                      setState(() {
+                        _startDate = d;
+                        if (_endDate.isBefore(d)) _endDate = d;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_today_rounded, size: 15),
+                  label: Text('From: $startStr', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final d = await showDatePicker(
+                      context: context,
+                      initialDate: _endDate,
+                      firstDate: _startDate,
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (d != null) setState(() => _endDate = d);
+                  },
+                  icon: const Icon(Icons.calendar_today_rounded, size: 15),
+                  label: Text('To: $endStr', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _reasonController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Reason for reschedule (optional)',
+              hintText: 'e.g., Event rescheduled',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting
+              ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Update Dates'),
+        ),
+      ],
+    );
   }
 }
 
@@ -698,6 +1104,245 @@ class _OfficialDutyTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _RegularizationRequestsTab extends ConsumerWidget {
+  const _RegularizationRequestsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final regularizationsAsync = ref.watch(regularizationsProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.refresh(regularizationsProvider.future),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Attendance Regularizations',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: -0.2),
+              ),
+              TextButton.icon(
+                onPressed: () => RegularizationRequestBottomSheet.show(context),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Request New'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          regularizationsAsync.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (err, _) => _ErrorStateCard(
+              error: err,
+              onRetry: () => ref.invalidate(regularizationsProvider),
+            ),
+            data: (records) {
+              if (records.isEmpty) {
+                return const _EmptyStateCard(
+                  icon: Icons.history_toggle_off_rounded,
+                  title: 'No Regularization Requests',
+                  message: 'You have not submitted any attendance regularizations or missed punch requests yet.',
+                );
+              }
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: records.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 14),
+                itemBuilder: (context, index) {
+                  return _RegularizationTile(request: records[index]);
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RegularizationTile extends StatelessWidget {
+  const _RegularizationTile({required this.request});
+
+  final RegularizationRequest request;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final (statusColor, statusIcon) = _statusVisuals(request.status);
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: statusColor.withValues(alpha: 0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withValues(alpha: isDark ? 0.18 : 0.05),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(statusIcon, color: statusColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      request.punchTypeLabel,
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      request.reference,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(statusIcon, size: 14, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Text(
+                      request.statusLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Divider(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3), height: 1),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_rounded, size: 16, color: Colors.grey),
+              const SizedBox(width: 8),
+              Text(
+                request.formattedDate,
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
+              if (request.formattedTime != null) ...[
+                const SizedBox(width: 12),
+                const Icon(Icons.access_time_rounded, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(
+                  request.formattedTime!,
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  request.reasonLabel,
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              if (request.employeeRemarks != null && request.employeeRemarks!.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    request.employeeRemarks!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (request.approverRemarks != null && request.approverRemarks!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.comment_outlined, size: 14, color: Color(0xFF6366F1)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${request.approverName ?? 'Manager'}: ${request.approverRemarks}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  (Color, IconData) _statusVisuals(String status) {
+    final s = status.toLowerCase();
+    if (s.contains('approved')) return (const Color(0xFF10B981), Icons.check_circle_rounded);
+    if (s.contains('rejected')) return (const Color(0xFFEF4444), Icons.cancel_rounded);
+    return (const Color(0xFFF59E0B), Icons.pending_actions_rounded);
   }
 }
 

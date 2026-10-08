@@ -64,9 +64,16 @@ class LeaveRequest {
     required this.endDate,
     required this.formattedDates,
     required this.daysCount,
+    this.approvedDaysCount,
     required this.status,
     required this.reason,
     required this.createdAt,
+    this.canCancel = false,
+    this.canReschedule = false,
+    this.markedToName,
+    this.cancellationReason,
+    this.cancelledAt,
+    this.rescheduledAt,
     this.approvals = const [],
   });
 
@@ -78,14 +85,22 @@ class LeaveRequest {
   final DateTime endDate;
   final String formattedDates;
   final int daysCount;
+  final int? approvedDaysCount;
   final String status;
   final String reason;
   final DateTime createdAt;
+  final bool canCancel;
+  final bool canReschedule;
+  final String? markedToName;
+  final String? cancellationReason;
+  final DateTime? cancelledAt;
+  final DateTime? rescheduledAt;
   final List<ApprovalStep> approvals;
 
   bool get isPending => status.toLowerCase() == 'pending';
   bool get isApproved => status.toLowerCase() == 'approved';
   bool get isRejected => status.toLowerCase() == 'rejected';
+  bool get isCancelled => status.toLowerCase() == 'cancelled';
   bool get isForwarded => status.toLowerCase() == 'forwarded';
 }
 
@@ -93,12 +108,15 @@ class RequestsOverview {
   const RequestsOverview({
     this.pendingLeaveRequests = 0,
     this.pendingDutyRequests = 0,
+    this.pendingRegularizationRequests = 0,
     this.upcomingApprovedLeaves = const [],
     this.upcomingApprovedDuties = const [],
   });
 
   final int pendingLeaveRequests;
   final int pendingDutyRequests;
+  final int pendingRegularizationRequests;
   final List<LeaveRequest> upcomingApprovedLeaves;
   final List<dynamic> upcomingApprovedDuties;
 }
+

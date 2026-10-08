@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/attendance_record_dto.dart';
-import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 
 void main() {
   group('AttendanceRecordDto & AttendanceRecord Late Arrival Resolution', () {

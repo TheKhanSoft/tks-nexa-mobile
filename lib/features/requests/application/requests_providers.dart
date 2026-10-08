@@ -5,6 +5,7 @@ import 'package:tks_nexa_attendance/features/organization/application/organizati
 import 'package:tks_nexa_attendance/features/requests/data/requests_api.dart';
 import 'package:tks_nexa_attendance/features/requests/domain/leave_request.dart';
 import 'package:tks_nexa_attendance/features/requests/domain/official_duty_request.dart';
+import 'package:tks_nexa_attendance/features/requests/domain/regularization_request.dart';
 
 final requestsApiProvider = Provider<RequestsApi>((ref) {
   final organization = ref.watch(organizationSessionProvider).value;
@@ -36,6 +37,11 @@ final hostOfficesProvider = FutureProvider<List<HostOffice>>((ref) {
 final officialDutyRequestsProvider =
     FutureProvider<List<OfficialDutyRequest>>((ref) {
   return ref.watch(requestsApiProvider).fetchOfficialDutyRequests();
+});
+
+final regularizationsProvider =
+    FutureProvider<List<RegularizationRequest>>((ref) {
+  return ref.watch(requestsApiProvider).fetchRegularizations();
 });
 
 final requestsOverviewProvider = FutureProvider<RequestsOverview>((ref) {

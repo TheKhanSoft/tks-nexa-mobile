@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
+import 'package:tks_nexa_attendance/features/requests/application/requests_providers.dart';
 
-class RegularizationRequestBottomSheet extends StatefulWidget {
+class RegularizationRequestBottomSheet extends ConsumerStatefulWidget {
   const RegularizationRequestBottomSheet({
     super.key,
     this.initialDate,
@@ -23,12 +26,12 @@ class RegularizationRequestBottomSheet extends StatefulWidget {
   }
 
   @override
-  State<RegularizationRequestBottomSheet> createState() =>
+  ConsumerState<RegularizationRequestBottomSheet> createState() =>
       _RegularizationRequestBottomSheetState();
 }
 
 class _RegularizationRequestBottomSheetState
-    extends State<RegularizationRequestBottomSheet> {
+    extends ConsumerState<RegularizationRequestBottomSheet> {
   final _formKey = GlobalKey<FormState>();
   late DateTime _selectedDate;
   String _punchType = 'check_in';
@@ -51,37 +54,80 @@ class _RegularizationRequestBottomSheetState
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_formKey.currentState?.validate() != true) return;
     setState(() => _submitting = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) {
-        Navigator.of(context).pop();
-        showDialog<void>(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 26),
-                SizedBox(width: 10),
-                Text('Request Submitted', style: TextStyle(fontWeight: FontWeight.w900)),
-              ],
-            ),
-            content: Text(
-              'Your regularization request for ${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')} (${_requestedTime.format(context)}) has been submitted to your line manager.',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Great'),
-              ),
+
+    final dateStr =
+        '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+    final timeStr =
+        '${_requestedTime.hour.toString().padLeft(2, '0')}:${_requestedTime.minute.toString().padLeft(2, '0')}';
+
+    try {
+      await ref.read(requestsApiProvider).submitRegularization(
+        date: dateStr,
+        punchType: _punchType,
+        requestedPunchTime: timeStr,
+        reason: _reasonController.text.trim(),
+      );
+
+      if (!mounted) return;
+      ref.invalidate(regularizationsProvider);
+      ref.invalidate(requestsOverviewProvider);
+
+      Navigator.of(context).pop();
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 26),
+              SizedBox(width: 10),
+              Text('Request Submitted', style: TextStyle(fontWeight: FontWeight.w900)),
             ],
           ),
-        );
-      }
-    });
+          content: Text(
+            'Your regularization request for $dateStr (${_requestedTime.format(context)}) has been submitted to your line manager.',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Great'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final errorMsg = e is AppFailure ? e.message : e.toString();
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Row(
+            children: [
+              Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 26),
+              SizedBox(width: 10),
+              Text('Cannot Submit', style: TextStyle(fontWeight: FontWeight.w900)),
+            ],
+          ),
+          content: Text(
+            errorMsg,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -116,7 +162,7 @@ class _RegularizationRequestBottomSheetState
               ),
               const SizedBox(height: 18),
               const Text(
-                'Regularization / Missed Check In/Out Request',
+                'Regularization / Missed Punch Request',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.3),
               ),
               const SizedBox(height: 6),
@@ -148,7 +194,7 @@ class _RegularizationRequestBottomSheetState
               const SizedBox(height: 14),
               // Punch Type Dropdown
               DropdownButtonFormField<String>(
-                value: _punchType,
+                initialValue: _punchType,
                 decoration: const InputDecoration(labelText: 'Missed Attendance Type'),
                 items: const [
                   DropdownMenuItem(value: 'check_in', child: Text('Missed Check-In')),
@@ -181,7 +227,7 @@ class _RegularizationRequestBottomSheetState
                 maxLines: 3,
                 decoration: const InputDecoration(
                   labelText: 'Reason for Regularization',
-                  hintText: 'e.g., Device battery died, biometric scanner offline, field duty',
+                  hintText: 'e.g., Biometric terminal offline, field visit, mobile battery issue',
                 ),
                 validator: (val) => val == null || val.trim().length < 8
                     ? 'Please provide a reason (at least 8 characters).'
@@ -195,7 +241,7 @@ class _RegularizationRequestBottomSheetState
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 child: _submitting
-                    ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text('Submit Regularization Request', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
               ),
             ],

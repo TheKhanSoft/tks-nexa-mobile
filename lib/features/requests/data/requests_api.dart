@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/features/requests/domain/leave_request.dart';
 import 'package:tks_nexa_attendance/features/requests/domain/official_duty_request.dart';
+import 'package:tks_nexa_attendance/features/requests/domain/regularization_request.dart';
 
 class RequestsApi {
   const RequestsApi(this._dio, this._accessToken);
@@ -76,6 +77,7 @@ class RequestsApi {
           );
         }).toList(growable: false);
 
+        final markedTo = m['marked_to'] is Map ? Map<String, dynamic>.from(m['marked_to']) : null;
         return LeaveRequest(
           id: _int(m['id']),
           publicId: _string(m['public_id']),
@@ -85,14 +87,56 @@ class RequestsApi {
           endDate: _date(m['end_date']),
           formattedDates: _string(m['formatted_dates'], fallback: '${m['start_date']} – ${m['end_date']}'),
           daysCount: _int(m['days_count'], fallback: 1),
+          approvedDaysCount: m['approved_days_count'] != null ? _int(m['approved_days_count']) : null,
           status: _string(m['status'], fallback: 'Pending'),
           reason: _string(m['reason']),
           createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
+          canCancel: m['can_cancel'] == true,
+          canReschedule: m['can_reschedule'] == true,
+          markedToName: markedTo != null ? _stringOpt(markedTo['name']) : null,
+          cancellationReason: _stringOpt(m['cancellation_reason']),
+          cancelledAt: _dateTime(m['cancelled_at']),
+          rescheduledAt: _dateTime(m['rescheduled_at']),
           approvals: approvals,
         );
       }).toList(growable: false);
     } on DioException catch (error) {
       throw _failureFor(error, fallback: 'Unable to load leave requests.');
+    }
+  }
+
+  Future<void> cancelLeave(int id, {String? reason}) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/leaves/$id/cancel',
+        data: {
+          if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Leave request could not be cancelled.');
+    }
+  }
+
+  Future<void> changeLeaveDates({
+    required int id,
+    required String startDate,
+    required String endDate,
+    String? reason,
+  }) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/leaves/$id/change-dates',
+        data: {
+          'start_date': startDate,
+          'end_date': endDate,
+          if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Leave dates could not be updated.');
     }
   }
 
@@ -233,6 +277,71 @@ class RequestsApi {
     }
   }
 
+  Future<List<RegularizationRequest>> fetchRegularizations({String? status, int? year}) async {
+    try {
+      final response = await _dio.get<dynamic>(
+        'v1/regularizations',
+        queryParameters: {
+          if (status != null && status.isNotEmpty) 'status': status,
+          if (year != null) 'year': year,
+        },
+        options: _authorized,
+      );
+      final root = _asMap(response.data);
+      final list = root['data'] is List ? root['data'] as List : const [];
+      return list.whereType<Map>().map((map) {
+        final m = Map<String, dynamic>.from(map);
+        return RegularizationRequest(
+          id: _int(m['id']),
+          publicId: _string(m['public_id']),
+          reference: _string(m['reference']),
+          date: _date(m['date']),
+          formattedDate: _string(m['formatted_date'], fallback: _string(m['date'])),
+          punchType: _string(m['punch_type']),
+          punchTypeLabel: _string(m['punch_type_label'], fallback: 'Regularization'),
+          requestedPunchTime: _stringOpt(m['requested_punch_time']),
+          formattedTime: _stringOpt(m['formatted_time']),
+          reason: _string(m['reason']),
+          reasonLabel: _string(m['reason_label'], fallback: _string(m['reason'])),
+          employeeRemarks: _stringOpt(m['employee_remarks']),
+          status: _string(m['status'], fallback: 'pending'),
+          statusLabel: _string(m['status_label'], fallback: 'Pending'),
+          approverName: _stringOpt(m['approver_name']),
+          approverRemarks: _stringOpt(m['approver_remarks']),
+          decisionAt: _dateTime(m['decision_at']),
+          createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
+        );
+      }).toList(growable: false);
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Unable to load attendance regularizations.');
+    }
+  }
+
+  Future<void> submitRegularization({
+    required String date,
+    required String punchType,
+    required String requestedPunchTime,
+    required String reason,
+    String? employeeRemarks,
+  }) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/regularizations',
+        data: {
+          'date': date,
+          'punch_type': punchType,
+          'requested_punch_time': requestedPunchTime,
+          'reason': reason,
+          if (employeeRemarks != null && employeeRemarks.trim().isNotEmpty)
+            'employee_remarks': employeeRemarks.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Regularization request could not be submitted.');
+    }
+  }
+
   Future<RequestsOverview> fetchRequestsOverview() async {
     try {
       final response = await _dio.get<dynamic>(
@@ -244,6 +353,7 @@ class RequestsApi {
       return RequestsOverview(
         pendingLeaveRequests: _int(data['pending_leave_requests']),
         pendingDutyRequests: _int(data['pending_duty_requests']),
+        pendingRegularizationRequests: _int(data['pending_regularization_requests']),
       );
     } on Object {
       return const RequestsOverview();
