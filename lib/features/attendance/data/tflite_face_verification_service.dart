@@ -118,7 +118,9 @@ class TfliteFaceVerificationService implements FaceVerificationService {
       livenessPassed:
           !enrolledProfile.livenessRequired || capture.livenessPassed,
       challenge: capture.livenessChallenge,
-      modelVersion: 'MobileFaceNet (192-D)',
+      modelVersion: liveEmbedding.length == 512
+          ? 'FaceNet (512-D)'
+          : 'MobileFaceNet (${liveEmbedding.length}-D)',
       liveVector: liveEmbedding,
       mirroredVector: mirroredEmbedding,
     );

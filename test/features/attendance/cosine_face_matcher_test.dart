@@ -29,5 +29,16 @@ void main() {
       final sim = CosineFaceMatcher.compare(a, b);
       expect(sim, greaterThan(0.95));
     });
+
+    test('supports 512-D vectors accurately', () {
+      final v = List<double>.generate(512, (i) => math.cos(i.toDouble()));
+      final sim = CosineFaceMatcher.compare(v, v);
+      expect(sim, closeTo(1.0, 0.0001));
+
+      final a = List<double>.generate(512, (i) => math.sin(i.toDouble()));
+      final b = List<double>.generate(512, (i) => -math.sin(i.toDouble()));
+      final oppSim = CosineFaceMatcher.compare(a, b);
+      expect(oppSim, closeTo(-1.0, 0.0001));
+    });
   });
 }
