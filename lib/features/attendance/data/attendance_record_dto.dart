@@ -108,6 +108,7 @@ class AttendanceRecordDto {
             longitude: record.longitude ?? existing.longitude,
             trustScore: record.trustScore ?? existing.trustScore,
             verificationCount: combinedCount,
+            verificationCode: existing.verificationCode ?? record.verificationCode,
           );
         }
       }
@@ -306,6 +307,7 @@ class AttendanceRecordDto {
       longitude: _double(coordsMap?['longitude']),
       trustScore: _int(map['trust_score'], fallback: _int(map['trust'])),
       verificationCount: verificationCount > 0 ? verificationCount : (rawScans.isNotEmpty ? rawScans.length : 1),
+      verificationCode: _string(map['verification_code']).isNotEmpty ? _string(map['verification_code']) : null,
     );
   }
 

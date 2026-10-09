@@ -44,6 +44,7 @@ class AttendanceRecord {
     this.longitude,
     this.trustScore,
     this.verificationCount = 0,
+    this.verificationCode,
   // ignore: prefer_initializing_formals
   }) : _isLate = isLate;
 
@@ -67,6 +68,7 @@ class AttendanceRecord {
   final double? longitude;
   final int? trustScore;
   final int verificationCount;
+  final String? verificationCode;
 
   bool get isPresent =>
       status.toLowerCase().contains('present') ||

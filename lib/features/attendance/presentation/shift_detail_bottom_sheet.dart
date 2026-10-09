@@ -116,7 +116,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
           number: 1,
           time: inTime,
           statusTag: record.isLate ? 'Late Arrival' : 'Shift In',
-          title: 'Facial Verification • Geofence Validated',
+          title: 'Face Biometric Verified',
           location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
           matchPercentage: record.trustScore != null ? record.trustScore!.toDouble() : 88.0,
@@ -131,7 +131,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
           number: 2,
           time: outTime,
           statusTag: 'Shift Out',
-          title: 'Biometric Terminal Verification',
+          title: 'Biometric Terminal Verified',
           location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
           matchPercentage: record.trustScore != null ? record.trustScore!.toDouble() : 91.0,
@@ -618,10 +618,44 @@ class _TimelineNode extends StatelessWidget {
   final AttendanceRecord record;
   final bool isLast;
 
+  static String cleanTitle(String raw, int number) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('rfid')) return 'RFID Smart Card Scanned';
+    if (lower.contains('terminal')) return 'Biometric Terminal Verified';
+    if (lower.contains('cafeteria')) return 'Cafeteria Presence Scanned';
+    if (lower.contains('check-in') ||
+        lower.contains('check in') ||
+        lower.contains('exit') ||
+        lower.contains('scanner') ||
+        lower.contains('geofence') ||
+        lower.contains('face') ||
+        lower.contains('facial')) {
+      return number <= 1 ? 'Face Biometric Verified' : 'Face Biometric Scanned';
+    }
+    return number <= 1 ? 'Face Biometric Verified' : 'Face Biometric Scanned';
+  }
+
+  static String cleanTag(String raw, int number, bool isLast) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('late')) return 'Late Arrival';
+    if (lower.contains('check') || lower == 'check in' || lower == 'checkin' || lower == 'in') {
+      return number <= 1 ? 'Shift In' : 'Presence Scanned';
+    }
+    if (lower.contains('exit') || lower == 'check out' || lower == 'checkout' || lower == 'out') {
+      return isLast ? 'Shift Out' : 'Presence Scanned';
+    }
+    if (lower == 'shift in') return 'Shift In';
+    if (lower == 'shift out') return 'Shift Out';
+    if (lower == 'presence scanned') return 'Presence Scanned';
+    return isLast && number >= 2 ? 'Shift Out' : (number <= 1 ? 'Shift In' : 'Presence Scanned');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (badgeColor, iconData) = _visualsForTag(tp.statusTag, tp.deviceSource);
+    final sanitizedTitle = cleanTitle(tp.title, tp.number);
+    final sanitizedTag = cleanTag(tp.statusTag, tp.number, isLast);
+    final (badgeColor, iconData) = _visualsForTag(sanitizedTag, tp.deviceSource);
 
     return IntrinsicHeight(
       child: Row(
@@ -650,7 +684,10 @@ class _TimelineNode extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => ViewAttendanceRecordScreen.fromTouchpoint(
-                        touchpoint: tp,
+                        touchpoint: tp.copyWith(
+                          title: sanitizedTitle,
+                          statusTag: sanitizedTag,
+                        ),
                         recordDate: record.date,
                       ),
                     ),
@@ -698,7 +735,7 @@ class _TimelineNode extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                            child: Text(tp.statusTag, style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900, fontSize: 10)),
+                            child: Text(sanitizedTag, style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900, fontSize: 10)),
                           ),
                           const SizedBox(width: 6),
                           Icon(
@@ -709,7 +746,7 @@ class _TimelineNode extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(tp.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text(sanitizedTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       Text('${tp.location} · ${tp.deviceLabel}', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
                     ],
                   ),

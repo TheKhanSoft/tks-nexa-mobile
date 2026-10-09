@@ -19,6 +19,7 @@ class MobilePunchLogItem {
     required this.deviceModel,
     this.photoPath,
     this.photoUrl,
+    this.verificationCode,
   });
 
   final String id;
@@ -32,6 +33,7 @@ class MobilePunchLogItem {
   final String deviceModel;
   final String? photoPath;
   final String? photoUrl;
+  final String? verificationCode;
 }
 
 DateTime _combineDateAndTime(DateTime date, String? timeStr) {
@@ -104,6 +106,7 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
             deviceModel: deviceModel,
             photoPath: localSelfie,
             photoUrl: snapshotUrl,
+            verificationCode: log['verification_code']?.toString() ?? log['code']?.toString(),
           ),
         );
       }
@@ -136,6 +139,7 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
             deviceModel: rec.deviceModel ?? rec.deviceLabel ?? 'Authorized Device',
             photoPath: selfiePath,
             photoUrl: rec.photoUrl,
+            verificationCode: rec.verificationCode,
           ),
         );
       }
@@ -156,6 +160,7 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
             deviceModel: rec.deviceModel ?? rec.deviceLabel ?? 'Authorized Device',
             photoPath: selfiePath,
             photoUrl: rec.photoUrl,
+            verificationCode: rec.verificationCode,
           ),
         );
       }

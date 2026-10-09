@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -20,6 +21,8 @@ enum WatermarkMode {
 
 class AttendanceWatermarkService {
   const AttendanceWatermarkService();
+
+  static const MethodChannel _platformChannel = MethodChannel('com.tksnexa.thekhansoft/device_security');
 
   /// Format a DateTime as 'YYYY-MM-DD HH:mm:ss'
   static String formatTimestamp(DateTime dt) {
@@ -170,13 +173,11 @@ class AttendanceWatermarkService {
     );
 
     final qrInnerPad = 4.5 * scale;
-    final qrInnerRect = Rect.fromLTWH(
-      qrRight + qrInnerPad,
-      qrTop + qrInnerPad,
-      qrBoxSize - qrInnerPad * 2,
-      qrBoxSize - qrInnerPad * 2,
-    );
-    qrPainter.paint(canvas, qrInnerRect.size);
+    final qrInnerSize = qrBoxSize - qrInnerPad * 2;
+    canvas.save();
+    canvas.translate(qrRight + qrInnerPad, qrTop + qrInnerPad);
+    qrPainter.paint(canvas, Size(qrInnerSize, qrInnerSize));
+    canvas.restore();
 
     // --- Bottom Bar Overlay ---
     final barHeight = 44.0 * scale;
@@ -214,48 +215,49 @@ class AttendanceWatermarkService {
       ],
     );
 
+    final rightBadgeEstimatedWidth = 115.0 * scale;
     final btp = TextPainter(
       text: bottomTextSpan,
       textDirection: TextDirection.ltr,
-    )..layout(maxWidth: imgW - 85.0 * scale);
+    )..layout(maxWidth: imgW - rightBadgeEstimatedWidth);
 
     btp.paint(
       canvas,
       Offset(12.0 * scale, imgH - barHeight + (barHeight - btp.height) / 2),
     );
 
-    // Bottom-Right: '● ONLINE' badge
-    const onlineColor = Color(0xFF10B981);
-    final dotRadius = 3.2 * scale;
-    final onlineRightMargin = 14.0 * scale;
+    // Bottom-Right: '● TKS Nexa Mobile' badge
+    const badgeColor = Color(0xFF10B981);
+    final dotRadius = 3.0 * scale;
+    final rightMargin = 12.0 * scale;
 
-    final onlineTextSpan = TextSpan(
-      text: 'ONLINE',
+    final mobileTextSpan = TextSpan(
+      text: 'TKS Nexa Mobile',
       style: TextStyle(
-        color: onlineColor,
+        color: badgeColor,
         fontWeight: FontWeight.w900,
-        fontSize: 9.5 * scale,
-        letterSpacing: 0.8 * scale,
+        fontSize: 9.2 * scale,
+        letterSpacing: 0.4 * scale,
       ),
     );
 
-    final otp = TextPainter(
-      text: onlineTextSpan,
+    final mtp = TextPainter(
+      text: mobileTextSpan,
       textDirection: TextDirection.ltr,
     )..layout();
 
-    final dotX = imgW - onlineRightMargin - otp.width - 7.0 * scale;
+    final dotX = imgW - rightMargin - mtp.width - 6.0 * scale;
     final dotY = imgH - (barHeight / 2);
 
     canvas.drawCircle(
       Offset(dotX, dotY),
       dotRadius,
-      Paint()..color = onlineColor,
+      Paint()..color = badgeColor,
     );
 
-    otp.paint(
+    mtp.paint(
       canvas,
-      Offset(imgW - onlineRightMargin - otp.width, dotY - otp.height / 2),
+      Offset(imgW - rightMargin - mtp.width, dotY - mtp.height / 2),
     );
 
     final picture = recorder.endRecording();
@@ -358,7 +360,11 @@ class AttendanceWatermarkService {
     double? longitude,
   }) async {
     final tempDir = await getTemporaryDirectory();
-    final tempFile = File('${tempDir.path}/Attendance_${verificationCode.toUpperCase()}.png');
+    final shareDir = Directory('${tempDir.path}/share_plus');
+    if (!shareDir.existsSync()) {
+      shareDir.createSync(recursive: true);
+    }
+    final tempFile = File('${shareDir.path}/Attendance_${verificationCode.toUpperCase()}.png');
     await tempFile.writeAsBytes(imageBytes);
 
     final caption = formatShareCaption(
@@ -368,6 +374,48 @@ class AttendanceWatermarkService {
       verificationCode: verificationCode,
     );
 
+    await Share.shareXFiles(
+      [XFile(tempFile.path, mimeType: 'image/png')],
+      text: caption,
+    );
+  }
+
+  /// Directly open WhatsApp with the watermarked image and details
+  Future<void> shareDirectToWhatsApp({
+    required Uint8List imageBytes,
+    required String verificationCode,
+    required DateTime timestamp,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final shareDir = Directory('${tempDir.path}/share_plus');
+    if (!shareDir.existsSync()) {
+      shareDir.createSync(recursive: true);
+    }
+    final tempFile = File('${shareDir.path}/Attendance_${verificationCode.toUpperCase()}.png');
+    await tempFile.writeAsBytes(imageBytes);
+
+    final caption = formatShareCaption(
+      timestamp: timestamp,
+      latitude: latitude,
+      longitude: longitude,
+      verificationCode: verificationCode,
+    );
+
+    if (Platform.isAndroid) {
+      try {
+        final success = await _platformChannel.invokeMethod<bool>('shareToWhatsApp', {
+          'filePath': tempFile.path,
+          'caption': caption,
+        });
+        if (success == true) return;
+      } catch (e) {
+        debugPrint('Direct WhatsApp share invocation failed: $e. Falling back to SharePlus.');
+      }
+    }
+
+    // Fallback if WhatsApp is not directly launched or on non-Android platform
     await Share.shareXFiles(
       [XFile(tempFile.path, mimeType: 'image/png')],
       text: caption,

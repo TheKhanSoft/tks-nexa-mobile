@@ -58,6 +58,7 @@ class PunchTouchpoint {
     this.similarityScore,
     this.deviceSource = 'mobile',
     this.eventUid,
+    this.verificationCode,
     this.latitude,
     this.longitude,
     this.snapshotUrl,
@@ -74,10 +75,57 @@ class PunchTouchpoint {
   final double? similarityScore;
   final String deviceSource;
   final String? eventUid;
+  final String? verificationCode;
   final double? latitude;
   final double? longitude;
   final String? snapshotUrl;
   final DateTime? timestamp;
+
+  String get displayVerificationCode {
+    if (verificationCode != null && verificationCode!.trim().isNotEmpty) {
+      return verificationCode!.trim().toUpperCase();
+    }
+    if (eventUid != null && eventUid!.replaceAll('-', '').length >= 8) {
+      return eventUid!.replaceAll('-', '').substring(0, 8).toUpperCase();
+    }
+    return '';
+  }
+
+  PunchTouchpoint copyWith({
+    int? number,
+    String? time,
+    String? statusTag,
+    String? title,
+    String? location,
+    String? deviceLabel,
+    double? matchPercentage,
+    double? similarityScore,
+    String? deviceSource,
+    String? eventUid,
+    String? verificationCode,
+    double? latitude,
+    double? longitude,
+    String? snapshotUrl,
+    DateTime? timestamp,
+  }) {
+    return PunchTouchpoint(
+      number: number ?? this.number,
+      time: time ?? this.time,
+      statusTag: statusTag ?? this.statusTag,
+      title: title ?? this.title,
+      location: location ?? this.location,
+      deviceLabel: deviceLabel ?? this.deviceLabel,
+      matchPercentage: matchPercentage ?? this.matchPercentage,
+      similarityScore: similarityScore ?? this.similarityScore,
+      deviceSource: deviceSource ?? this.deviceSource,
+      eventUid: eventUid ?? this.eventUid,
+      verificationCode: verificationCode ?? this.verificationCode,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      snapshotUrl: snapshotUrl ?? this.snapshotUrl,
+      timestamp: timestamp ?? this.timestamp,
+    );
+  }
 }
 
 class GeofenceAudit {

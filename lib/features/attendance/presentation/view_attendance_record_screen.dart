@@ -50,10 +50,12 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
       ts = _combineDateWithTime(recordDate, touchpoint.time);
     }
 
-    final code = AttendanceWatermarkService.formatVerificationCode(
-      touchpoint.eventUid,
-      timestamp: ts,
-    );
+    final code = touchpoint.displayVerificationCode.isNotEmpty
+        ? touchpoint.displayVerificationCode
+        : AttendanceWatermarkService.formatVerificationCode(
+            touchpoint.eventUid,
+            timestamp: ts,
+          );
 
     return ViewAttendanceRecordScreen(
       timestamp: ts,
@@ -81,11 +83,13 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
         : (record.firstInFormatted ?? record.firstIn);
     final ts = _combineDateWithTime(record.date, timeStr);
 
-    final code = AttendanceWatermarkService.formatVerificationCode(
-      null,
-      timestamp: ts,
-      fallbackSeed: record.id,
-    );
+    final code = (record.verificationCode != null && record.verificationCode!.trim().isNotEmpty)
+        ? record.verificationCode!.trim().toUpperCase()
+        : AttendanceWatermarkService.formatVerificationCode(
+            null,
+            timestamp: ts,
+            fallbackSeed: record.id,
+          );
 
     return ViewAttendanceRecordScreen(
       timestamp: ts,
@@ -104,10 +108,12 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
 
   /// Factory helper from a MobilePunchLogItem
   static ViewAttendanceRecordScreen fromMobileLog(MobilePunchLogItem item) {
-    final code = AttendanceWatermarkService.formatVerificationCode(
-      item.id,
-      timestamp: item.timestamp,
-    );
+    final code = (item.verificationCode != null && item.verificationCode!.trim().isNotEmpty)
+        ? item.verificationCode!.trim().toUpperCase()
+        : AttendanceWatermarkService.formatVerificationCode(
+            item.id,
+            timestamp: item.timestamp,
+          );
 
     return ViewAttendanceRecordScreen(
       timestamp: item.timestamp,
@@ -269,13 +275,23 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
     try {
       final bytes = await _generateWatermark(WatermarkMode.shared);
       final watermarkService = ref.read(attendanceWatermarkServiceProvider);
-      await watermarkService.shareAttendance(
-        imageBytes: bytes,
-        verificationCode: _code,
-        timestamp: widget.timestamp,
-        latitude: widget.latitude ?? 34.188177,
-        longitude: widget.longitude ?? 71.908437,
-      );
+      if (isWhatsApp) {
+        await watermarkService.shareDirectToWhatsApp(
+          imageBytes: bytes,
+          verificationCode: _code,
+          timestamp: widget.timestamp,
+          latitude: widget.latitude ?? 34.188177,
+          longitude: widget.longitude ?? 71.908437,
+        );
+      } else {
+        await watermarkService.shareAttendance(
+          imageBytes: bytes,
+          verificationCode: _code,
+          timestamp: widget.timestamp,
+          latitude: widget.latitude ?? 34.188177,
+          longitude: widget.longitude ?? 71.908437,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

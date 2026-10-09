@@ -399,8 +399,11 @@ class MobileAttendanceApi implements MobileAttendanceService {
 
     final punchLog = data['punch_log'] is Map ? _map(data['punch_log']) : <String, dynamic>{};
     final touchpointsList = punchLog['touchpoints'] is List ? punchLog['touchpoints'] as List : const [];
+    final totalTouchpoints = touchpointsList.length;
     final touchpoints = touchpointsList.whereType<Map>().map((tp) {
       final tpm = Map<String, dynamic>.from(tp);
+      final tpNumber = _int(tpm['touchpoint_number'], fallback: 1);
+      final idx = tpNumber - 1;
       final deviceMap = tpm['device'] is Map ? Map<String, dynamic>.from(tpm['device']) : {};
       final rawMatch = tpm['match_percentage'] ?? tpm['similarity_score'] ?? tpm['similarity'];
       final rawSimilarity = tpm['similarity_score'] ?? tpm['match_score'] ?? tpm['similarity'];
@@ -411,17 +414,53 @@ class MobileAttendanceApi implements MobileAttendanceService {
       if (rawTs != null) {
         parsedTs = DateTime.tryParse(rawTs.toString());
       }
+
+      // Strictly sanitize titles: eliminate "Exit Scanner", "Check-in", "+ Geofence"
+      final rawTitle = _string(tpm['title'], fallback: 'Face Biometric Scanned');
+      final lowerTitle = rawTitle.toLowerCase();
+      String cleanTitle;
+      if (lowerTitle.contains('rfid')) {
+        cleanTitle = 'RFID Smart Card Scanned';
+      } else if (lowerTitle.contains('terminal')) {
+        cleanTitle = 'Biometric Terminal Verified';
+      } else if (lowerTitle.contains('cafeteria')) {
+        cleanTitle = 'Cafeteria Presence Scanned';
+      } else if (lowerTitle.contains('check-in') || lowerTitle.contains('check in') || lowerTitle.contains('exit') || lowerTitle.contains('scanner') || lowerTitle.contains('geofence') || lowerTitle.contains('face') || lowerTitle.contains('facial')) {
+        cleanTitle = idx == 0 ? 'Face Biometric Verified' : 'Face Biometric Scanned';
+      } else {
+        cleanTitle = idx == 0 ? 'Face Biometric Verified' : 'Face Biometric Scanned';
+      }
+
+      // Strictly sanitize tags: eliminate repetitive "Check In" and "Check Out"
+      final rawTag = _string(tpm['status_tag'], fallback: 'Presence Scanned');
+      final lowerTag = rawTag.toLowerCase();
+      String cleanTag;
+      if (lowerTag.contains('late')) {
+        cleanTag = 'Late Arrival';
+      } else if (lowerTag.contains('check') || lowerTag == 'check in' || lowerTag == 'checkin' || lowerTag == 'in') {
+        cleanTag = idx == 0 ? 'Shift In' : 'Presence Scanned';
+      } else if (lowerTag.contains('exit') || lowerTag == 'check out' || lowerTag == 'checkout' || lowerTag == 'out') {
+        cleanTag = (idx == totalTouchpoints - 1 && totalTouchpoints >= 2) ? 'Shift Out' : 'Presence Scanned';
+      } else if (lowerTag == 'shift in') {
+        cleanTag = 'Shift In';
+      } else if (lowerTag == 'shift out') {
+        cleanTag = 'Shift Out';
+      } else {
+        cleanTag = 'Presence Scanned';
+      }
+
       return PunchTouchpoint(
-        number: _int(tpm['touchpoint_number'], fallback: 1),
+        number: tpNumber,
         time: _string(tpm['time'], fallback: '--:--'),
-        statusTag: _string(tpm['status_tag'], fallback: 'Touchpoint'),
-        title: _string(tpm['title'], fallback: 'Punch Event'),
+        statusTag: cleanTag,
+        title: cleanTitle,
         location: _string(tpm['location'], fallback: 'Office Perimeter'),
         deviceLabel: _string(deviceMap['display_label'] ?? deviceMap['label'] ?? deviceMap['model'], fallback: 'Mobile Device'),
         matchPercentage: rawMatch is num ? rawMatch.toDouble() : (rawMatch is String ? double.tryParse(rawMatch) : null),
         similarityScore: rawSimilarity is num ? rawSimilarity.toDouble() : (rawSimilarity is String ? double.tryParse(rawSimilarity) : null),
         deviceSource: _string(tpm['device_source'] ?? deviceMap['source'], fallback: 'mobile'),
         eventUid: tpm['event_uid']?.toString(),
+        verificationCode: tpm['verification_code']?.toString() ?? tpm['code']?.toString(),
         latitude: rawLat is num ? rawLat.toDouble() : (rawLat is String ? double.tryParse(rawLat) : null),
         longitude: rawLng is num ? rawLng.toDouble() : (rawLng is String ? double.tryParse(rawLng) : null),
         snapshotUrl: tpm['snapshot_url']?.toString(),
