@@ -4,6 +4,7 @@ import 'package:tks_nexa_attendance/features/attendance/application/attendance_h
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/punch_detail.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/regularization_request_bottom_sheet.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/view_attendance_record_screen.dart';
 
 class ShiftDetailBottomSheet extends ConsumerWidget {
   const ShiftDetailBottomSheet({super.key, required this.record});
@@ -114,21 +115,31 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
         PunchTouchpoint(
           number: 1,
           time: inTime,
-          statusTag: 'Check In',
-          title: 'Face Biometric + Geofence Verified',
+          statusTag: record.isLate ? 'Late Arrival' : 'Shift In',
+          title: 'Facial Verification • Geofence Validated',
           location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
           matchPercentage: record.trustScore != null ? record.trustScore!.toDouble() : 88.0,
+          deviceSource: 'mobile',
+          latitude: record.latitude,
+          longitude: record.longitude,
+          snapshotUrl: record.photoUrl,
+          timestamp: record.date,
         ),
       if (outTime != null && outTime.isNotEmpty && outTime != '--:--' && outTime != 'Pending')
         PunchTouchpoint(
           number: 2,
           time: outTime,
-          statusTag: 'Check Out',
-          title: 'Face Biometric Exit Scanner',
+          statusTag: 'Shift Out',
+          title: 'Biometric Terminal Verification',
           location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
           matchPercentage: record.trustScore != null ? record.trustScore!.toDouble() : 91.0,
+          deviceSource: 'edge_node',
+          latitude: record.latitude,
+          longitude: record.longitude,
+          snapshotUrl: record.photoUrl,
+          timestamp: record.date,
         ),
     ];
 
@@ -410,6 +421,7 @@ class _PunchDetailBody extends StatelessWidget {
           for (var i = 0; i < detail.touchpoints.length; i++)
             _TimelineNode(
               tp: detail.touchpoints[i],
+              record: record,
               isLast: i == detail.touchpoints.length - 1,
             ),
         const SizedBox(height: 20),
@@ -521,12 +533,31 @@ class _PunchDetailBody extends StatelessWidget {
         // Actions
         FilledButton.icon(
           onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ViewAttendanceRecordScreen.fromAttendanceRecord(
+                  record: record,
+                ),
+              ),
+            );
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFF0284C7),
+            minimumSize: const Size.fromHeight(52),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          ),
+          icon: const Icon(Icons.qr_code_rounded),
+          label: const Text('View Record & Share Attendance', style: TextStyle(fontWeight: FontWeight.w900)),
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          onPressed: () {
             final targetDate = record.date;
             Navigator.of(context).pop();
             RegularizationRequestBottomSheet.show(context, initialDate: targetDate);
           },
           style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(54),
+            minimumSize: const Size.fromHeight(52),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           ),
           icon: const Icon(Icons.edit_calendar_rounded),
@@ -536,7 +567,7 @@ class _PunchDetailBody extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: () => Navigator.of(context).pop(),
           style: OutlinedButton.styleFrom(
-            minimumSize: const Size.fromHeight(50),
+            minimumSize: const Size.fromHeight(48),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           ),
           icon: const Icon(Icons.download_rounded),
@@ -579,16 +610,18 @@ class _MetricBox extends StatelessWidget {
 class _TimelineNode extends StatelessWidget {
   const _TimelineNode({
     required this.tp,
+    required this.record,
     this.isLast = false,
   });
 
   final PunchTouchpoint tp;
+  final AttendanceRecord record;
   final bool isLast;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (badgeColor, iconData) = _visualsForTag(tp.statusTag);
+    final (badgeColor, iconData) = _visualsForTag(tp.statusTag, tp.deviceSource);
 
     return IntrinsicHeight(
       child: Row(
@@ -611,54 +644,76 @@ class _TimelineNode extends StatelessWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(tp.time, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                      const Spacer(),
-                      Builder(builder: (context) {
-                        final matchVal = tp.matchPercentage ?? tp.similarityScore;
-                        if (matchVal == null || matchVal <= 0) return const SizedBox.shrink();
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.verified_user_rounded, size: 11, color: Color(0xFF059669)),
-                                const SizedBox(width: 3.5),
-                                Text(
-                                  '${matchVal.toStringAsFixed(matchVal % 1 == 0 ? 0 : 1)}% Match',
-                                  style: const TextStyle(
-                                    color: Color(0xFF047857),
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-                        child: Text(tp.statusTag, style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900, fontSize: 10)),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ViewAttendanceRecordScreen.fromTouchpoint(
+                        touchpoint: tp,
+                        recordDate: record.date,
                       ),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(tp.time, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                          const Spacer(),
+                          Builder(builder: (context) {
+                            final matchVal = tp.matchPercentage ?? tp.similarityScore;
+                            if (matchVal == null || matchVal <= 0) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.verified_user_rounded, size: 11, color: Color(0xFF059669)),
+                                    const SizedBox(width: 3.5),
+                                    Text(
+                                      '${matchVal.toStringAsFixed(matchVal % 1 == 0 ? 0 : 1)}% Match',
+                                      style: const TextStyle(
+                                        color: Color(0xFF047857),
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(color: badgeColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
+                            child: Text(tp.statusTag, style: TextStyle(color: badgeColor, fontWeight: FontWeight.w900, fontSize: 10)),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(tp.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text('${tp.location} · ${tp.deviceLabel}', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(tp.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  Text('${tp.location} · ${tp.deviceLabel}', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
-                ],
+                ),
               ),
             ),
           ),
@@ -667,13 +722,34 @@ class _TimelineNode extends StatelessWidget {
     );
   }
 
-  (Color, IconData) _visualsForTag(String tag) {
+  (Color, IconData) _visualsForTag(String tag, String deviceSource) {
     final t = tag.toLowerCase();
-    if (t.contains('late')) return (const Color(0xFFF59E0B), Icons.fingerprint_rounded);
-    if (t.contains('out') || t.contains('break')) return (Colors.blue, Icons.smartphone_rounded);
-    if (t.contains('resume')) return (Colors.purple, Icons.badge_rounded);
-    if (t.contains('completed') || t.contains('exit')) return (const Color(0xFF10B981), Icons.sensor_door_rounded);
-    return (const Color(0xFF10B981), Icons.verified_rounded);
+    final isTerminal = deviceSource == 'edge_node' || deviceSource == 'terminal';
+    final isRfid = deviceSource == 'rfid' || t.contains('rfid') || t.contains('badge');
+
+    final IconData iconData;
+    if (isRfid) {
+      iconData = Icons.badge_rounded;
+    } else if (isTerminal) {
+      iconData = Icons.devices_rounded;
+    } else {
+      iconData = Icons.smartphone_rounded;
+    }
+
+    final Color badgeColor;
+    if (t.contains('late')) {
+      badgeColor = const Color(0xFFF59E0B);
+    } else if (t.contains('out') || t.contains('departure')) {
+      badgeColor = const Color(0xFF3B82F6);
+    } else if (t.contains('break')) {
+      badgeColor = const Color(0xFF8B5CF6);
+    } else if (t.contains('activity') || t.contains('presence') || t.contains('scan')) {
+      badgeColor = const Color(0xFF6366F1);
+    } else {
+      badgeColor = const Color(0xFF10B981);
+    }
+
+    return (badgeColor, iconData);
   }
 }
 

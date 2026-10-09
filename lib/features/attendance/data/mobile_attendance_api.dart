@@ -404,6 +404,13 @@ class MobileAttendanceApi implements MobileAttendanceService {
       final deviceMap = tpm['device'] is Map ? Map<String, dynamic>.from(tpm['device']) : {};
       final rawMatch = tpm['match_percentage'] ?? tpm['similarity_score'] ?? tpm['similarity'];
       final rawSimilarity = tpm['similarity_score'] ?? tpm['match_score'] ?? tpm['similarity'];
+      final rawLat = tpm['latitude'] ?? deviceMap['latitude'];
+      final rawLng = tpm['longitude'] ?? deviceMap['longitude'];
+      final rawTs = tpm['timestamp'] ?? tpm['time_raw'];
+      DateTime? parsedTs;
+      if (rawTs != null) {
+        parsedTs = DateTime.tryParse(rawTs.toString());
+      }
       return PunchTouchpoint(
         number: _int(tpm['touchpoint_number'], fallback: 1),
         time: _string(tpm['time'], fallback: '--:--'),
@@ -413,6 +420,12 @@ class MobileAttendanceApi implements MobileAttendanceService {
         deviceLabel: _string(deviceMap['display_label'] ?? deviceMap['label'] ?? deviceMap['model'], fallback: 'Mobile Device'),
         matchPercentage: rawMatch is num ? rawMatch.toDouble() : (rawMatch is String ? double.tryParse(rawMatch) : null),
         similarityScore: rawSimilarity is num ? rawSimilarity.toDouble() : (rawSimilarity is String ? double.tryParse(rawSimilarity) : null),
+        deviceSource: _string(tpm['device_source'] ?? deviceMap['source'], fallback: 'mobile'),
+        eventUid: tpm['event_uid']?.toString(),
+        latitude: rawLat is num ? rawLat.toDouble() : (rawLat is String ? double.tryParse(rawLat) : null),
+        longitude: rawLng is num ? rawLng.toDouble() : (rawLng is String ? double.tryParse(rawLng) : null),
+        snapshotUrl: tpm['snapshot_url']?.toString(),
+        timestamp: parsedTs,
       );
     }).toList(growable: false);
 

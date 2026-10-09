@@ -56,6 +56,12 @@ class PunchTouchpoint {
     required this.deviceLabel,
     this.matchPercentage,
     this.similarityScore,
+    this.deviceSource = 'mobile',
+    this.eventUid,
+    this.latitude,
+    this.longitude,
+    this.snapshotUrl,
+    this.timestamp,
   });
 
   final int number;
@@ -66,6 +72,12 @@ class PunchTouchpoint {
   final String deviceLabel;
   final double? matchPercentage;
   final double? similarityScore;
+  final String deviceSource;
+  final String? eventUid;
+  final double? latitude;
+  final double? longitude;
+  final String? snapshotUrl;
+  final DateTime? timestamp;
 }
 
 class GeofenceAudit {

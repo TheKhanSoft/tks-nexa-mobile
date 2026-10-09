@@ -1387,6 +1387,17 @@ class _AttendanceSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shift = profile.assignedShift;
+    String formatTime(String? timeStr) {
+      if (timeStr == null || timeStr.trim().isEmpty) return '';
+      final parts = timeStr.trim().split(':');
+      if (parts.length >= 2) {
+        final hour = parts[0].padLeft(2, '0');
+        final min = parts[1].padLeft(2, '0');
+        return '$hour:$min';
+      }
+      return timeStr;
+    }
+
     return _InfoSection(
       icon: Icons.schedule_rounded,
       title: 'Attendance & shift',
@@ -1401,7 +1412,9 @@ class _AttendanceSection extends StatelessWidget {
         ('Assigned shift', shift?.name ?? ''),
         (
           'Shift time',
-          shift == null ? '' : '${shift.startTime} – ${shift.endTime}',
+          shift == null
+              ? ''
+              : '${formatTime(shift.startTime)} – ${formatTime(shift.endTime)}',
         ),
         (
           'Grace period',

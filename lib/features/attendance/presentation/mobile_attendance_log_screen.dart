@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_history_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/view_attendance_record_screen.dart';
 
 class MobilePunchLogItem {
   const MobilePunchLogItem({
@@ -290,16 +291,28 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
                     final isPass = log.matchScore >= log.threshold;
                     final statusColor = isPass ? const Color(0xFF10B981) : const Color(0xFFEF4444);
 
-                    return Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.9),
+                    return Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(24),
+                      child: InkWell(
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: statusColor.withValues(alpha: 0.35), width: 1.5),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ViewAttendanceRecordScreen.fromMobileLog(log),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: statusColor.withValues(alpha: 0.35), width: 1.5),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                           Row(
                             children: [
                               ClipRRect(
@@ -373,8 +386,10 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                    );
-                  },
+                    ),
+                  ),
+                );
+              },
                 ),
               ],
             );
