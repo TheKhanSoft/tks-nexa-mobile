@@ -83,10 +83,13 @@ class AttendanceRecordDto {
           final hasMultiple = combinedCount >= 2 || allTimes.length >= 2;
           final effectiveOut = hasMultiple ? latestOut : null;
 
-          final combinedIsLate = existing.isLate || record.isLate;
-          final combinedStatus = combinedIsLate
-              ? 'Late'
-              : (existing.isPresent ? existing.status : record.status);
+          final combinedIsShiftEnded = existing.isShiftEnded || record.isShiftEnded;
+          final combinedIsLate = !combinedIsShiftEnded && (existing.isLate || record.isLate);
+          final combinedStatus = combinedIsShiftEnded
+              ? 'Shift Ended'
+              : (combinedIsLate
+                  ? 'Late'
+                  : (existing.isPresent ? existing.status : record.status));
 
           groupedMap[dateKey] = AttendanceRecord(
             id: existing.id,
@@ -94,6 +97,7 @@ class AttendanceRecordDto {
             dayName: existing.dayName,
             status: combinedStatus,
             isLate: combinedIsLate,
+            isShiftEnded: combinedIsShiftEnded,
             firstIn: existing.firstIn ?? record.firstIn,
             firstInFormatted: earliestIn,
             lastOut: effectiveOut,
@@ -190,8 +194,40 @@ class AttendanceRecordDto {
         _string(map['status']).toLowerCase().contains('late') ||
         _string(map['status_label']).toLowerCase().contains('late');
 
+    final isWeekendDay = date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
+    final isExplicitWeekend = map['is_weekend'] == true ||
+        map['weekend'] == true ||
+        map['is_off'] == true ||
+        map['is_off_day'] == true ||
+        _string(map['status']).toLowerCase().contains('weekend') ||
+        _string(map['status']).toLowerCase().contains('weekly off') ||
+        _string(map['status']).toLowerCase().contains('rest day');
+    final isExplicitHoliday = map['is_holiday'] == true ||
+        map['holiday'] == true ||
+        _string(map['status']).toLowerCase().contains('holiday') ||
+        _string(map['status']).toLowerCase().contains('gazetted');
+    final isExplicitDuty = map['is_official_duty'] == true ||
+        map['official_duty'] == true ||
+        map['is_duty'] == true ||
+        _string(map['status']).toLowerCase().contains('duty') ||
+        _string(map['status']).toLowerCase().contains('official') ||
+        _string(map['status']).toLowerCase().contains('od');
+
     var isLateResolved = rawIsLate;
-    var status = _string(map['status'], fallback: rawIsLate ? 'Late' : 'Present');
+    var status = _string(map['status']);
+    if (status.isEmpty) {
+      if (rawIsLate) {
+        status = 'Late';
+      } else if (isExplicitDuty) {
+        status = 'Official Duty';
+      } else if (isExplicitHoliday) {
+        status = 'Holiday';
+      } else if (isExplicitWeekend || isWeekendDay) {
+        status = 'Weekend';
+      } else {
+        status = 'Present';
+      }
+    }
     final verificationCount = _int(map['verification_count'], fallback: _int(map['total_scans']));
     final rawScans = map['scans'] is List ? (map['scans'] as List).whereType<Map>().toList() : <Map>[];
 
@@ -218,15 +254,57 @@ class AttendanceRecordDto {
       rawLastOut = _string(lastScan['time_raw'], fallback: rawLastOut);
     }
 
-    // If shift_start is provided, verify against arrival grace period
-    if (!isLateResolved) {
-      final shiftStartStr = _string(map['shift_start']);
+    // Detect Shift End time:
+    final shiftStartStr = _string(map['shift_start']);
+    final rawShiftTiming = _string(
+      map['shift_timing'],
+      fallback: _string(
+        map['shift_end'],
+        fallback: _string(
+          map['shift_end_time'],
+          fallback: _string(map['end_time']),
+        ),
+      ),
+    );
+
+    String resolvedShiftEnd = '';
+    if (rawShiftTiming.contains('-')) {
+      final parts = rawShiftTiming.split('-');
+      if (parts.length >= 2) {
+        resolvedShiftEnd = parts[1].trim();
+      }
+    } else {
+      resolvedShiftEnd = rawShiftTiming.trim();
+    }
+    if (resolvedShiftEnd.isEmpty) {
+      // General Shift standard end time cutoff is 04:00 PM
+      resolvedShiftEnd = '04:00 PM';
+    }
+
+    final checkInTimeStr = firstInFormatted.isNotEmpty ? firstInFormatted : firstIn;
+    final firstInDt = checkInTimeStr.isNotEmpty ? AttendanceRecord.parseTime(checkInTimeStr) : null;
+    final shiftEndDt = resolvedShiftEnd.isNotEmpty ? AttendanceRecord.parseTime(resolvedShiftEnd) : null;
+
+    bool isShiftEndedResolved = false;
+    final rawStatusLower = _string(map['status']).toLowerCase();
+
+    if (rawStatusLower.contains('shift ended') || rawStatusLower.contains('outside shift')) {
+      isShiftEndedResolved = true;
+    } else if (shiftEndDt != null && firstInDt != null) {
+      // If check-in happened at or after the shift end time
+      if (!firstInDt.isBefore(shiftEndDt)) {
+        isShiftEndedResolved = true;
+      }
+    }
+
+    if (isShiftEndedResolved) {
+      isLateResolved = false;
+      status = 'Shift Ended';
+    } else if (!isLateResolved) {
       final graceMinutes = _int(map['grace_period_minutes'], fallback: 15);
-      final checkInTimeStr = firstInFormatted.isNotEmpty ? firstInFormatted : firstIn;
-      if (shiftStartStr.isNotEmpty && checkInTimeStr.isNotEmpty) {
+      if (shiftStartStr.isNotEmpty && firstInDt != null) {
         final shiftStartDt = AttendanceRecord.parseTime(shiftStartStr);
-        final firstInDt = AttendanceRecord.parseTime(checkInTimeStr);
-        if (shiftStartDt != null && firstInDt != null) {
+        if (shiftStartDt != null) {
           final graceCutoff = shiftStartDt.add(Duration(minutes: graceMinutes));
           if (firstInDt.isAfter(graceCutoff)) {
             isLateResolved = true;
@@ -235,8 +313,17 @@ class AttendanceRecordDto {
       }
     }
 
-    if (isLateResolved && status.toLowerCase() == 'present') {
-      status = 'Late';
+    final sLower = status.toLowerCase();
+    if (!isShiftEndedResolved) {
+      if (isLateResolved && sLower == 'present') {
+        status = 'Late';
+      } else if (isExplicitHoliday || sLower.contains('holiday') || sLower.contains('gazetted')) {
+        status = 'Holiday';
+      } else if (isExplicitDuty || sLower.contains('duty') || sLower.contains('official')) {
+        status = 'Official Duty';
+      } else if (isExplicitWeekend || (isWeekendDay && (firstIn.isEmpty || sLower == 'scheduled' || sLower == 'scheduled shift' || sLower == 'absent'))) {
+        status = 'Weekend';
+      }
     }
 
     final hasMultiplePunches = verificationCount >= 2 || rawScans.length >= 2;
@@ -267,38 +354,47 @@ class AttendanceRecordDto {
       }
     }
 
+    final resolvedPhoto = _string(
+      map['evidence_photo'],
+      fallback: _string(
+        map['captured_photo_url'],
+        fallback: _string(
+          map['punch_photo'],
+          fallback: _string(
+            map['punch_photo_url'],
+            fallback: _string(
+              map['snapshot_url'],
+              fallback: _string(
+                map['attendance_photo'],
+                fallback: _string(
+                  map['verification_photo'],
+                  fallback: _string(
+                    map['selfie_url'],
+                    fallback: _string(
+                      map['face_photo_url'],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
     return AttendanceRecord(
       id: _string(map['id'], fallback: date.toIso8601String().split('T').first),
       date: date,
       dayName: _string(map['day_name'], fallback: _dayName(date)),
       status: status,
       isLate: isLateResolved,
+      isShiftEnded: isShiftEndedResolved,
       firstIn: firstIn.isNotEmpty ? firstIn : null,
       firstInFormatted: firstInFormatted.isNotEmpty ? firstInFormatted : (firstIn.isNotEmpty ? firstIn : null),
       lastOut: lastOut,
       lastOutFormatted: lastOutFormatted,
       shiftName: _string(map['shift_name'], fallback: _string(map['shift'], fallback: 'General Shift')),
-      photoUrl: _string(
-        map['photo_url'],
-        fallback: _string(
-          map['snapshot_url'],
-          fallback: _string(
-            map['evidence_photo'],
-            fallback: _string(map['captured_photo_url']),
-          ),
-        ),
-      ).isNotEmpty
-          ? _string(
-              map['photo_url'],
-              fallback: _string(
-                map['snapshot_url'],
-                fallback: _string(
-                  map['evidence_photo'],
-                  fallback: _string(map['captured_photo_url']),
-                ),
-              ),
-            )
-          : null,
+      photoUrl: resolvedPhoto.isNotEmpty ? resolvedPhoto : null,
       locationName: _string(map['location_name'], fallback: _string(map['location'])),
       deviceLabel: _string(deviceMap?['display_label'], fallback: _string(deviceMap?['model'])),
       deviceModel: _string(deviceMap?['model']),

@@ -110,12 +110,15 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
     final inTime = record.firstInFormatted ?? record.firstIn;
     final outTime = record.lastOutFormatted ?? record.lastOut;
 
+    final inDt = ViewAttendanceRecordScreen.combineDateWithTime(record.date, inTime);
+    final outDt = ViewAttendanceRecordScreen.combineDateWithTime(record.date, outTime);
+
     final touchpoints = <PunchTouchpoint>[
       if (inTime != null && inTime.isNotEmpty && inTime != '--:--' && inTime != 'Pending')
         PunchTouchpoint(
           number: 1,
           time: inTime,
-          statusTag: record.isLate ? 'Late Arrival' : 'Shift In',
+          statusTag: record.isShiftEnded ? 'Shift Ended' : (record.isLate ? 'Late Arrival' : 'Shift In'),
           title: 'Face Biometric Verified',
           location: record.locationName ?? 'Office Perimeter',
           deviceLabel: record.deviceName ?? record.deviceModel ?? 'Authorized Device',
@@ -124,7 +127,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
           latitude: record.latitude,
           longitude: record.longitude,
           snapshotUrl: record.photoUrl,
-          timestamp: record.date,
+          timestamp: inDt,
         ),
       if (outTime != null && outTime.isNotEmpty && outTime != '--:--' && outTime != 'Pending')
         PunchTouchpoint(
@@ -138,8 +141,8 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
           deviceSource: 'edge_node',
           latitude: record.latitude,
           longitude: record.longitude,
-          snapshotUrl: record.photoUrl,
-          timestamp: record.date,
+          snapshotUrl: null,
+          timestamp: outDt,
         ),
     ];
 
@@ -276,28 +279,62 @@ class _PunchDetailBody extends StatelessWidget {
                 ),
               ],
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.business_rounded, size: 14, color: theme.colorScheme.primary),
-                  const SizedBox(width: 5),
-                  Text(
-                    so.status,
-                    style: TextStyle(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
+            Builder(builder: (context) {
+              final sLower = so.status.toLowerCase();
+              final isWeekend = sLower.contains('weekend') || sLower.contains('off') || sLower.contains('rest');
+              final isHoliday = sLower.contains('holiday') || sLower.contains('gazetted');
+              final isDuty = sLower.contains('duty') || sLower.contains('official');
+              final isLate = sLower.contains('late');
+              final isEnded = sLower.contains('ended');
+
+              final badgeColor = isEnded
+                  ? const Color(0xFF6B7280)
+                  : isWeekend
+                      ? const Color(0xFF6366F1)
+                      : isHoliday
+                          ? const Color(0xFFF43F5E)
+                          : isDuty
+                              ? const Color(0xFF2563EB)
+                              : isLate
+                                  ? const Color(0xFFF59E0B)
+                                  : theme.colorScheme.primary;
+
+              final badgeIcon = isEnded
+                  ? Icons.timer_off_rounded
+                  : isWeekend
+                      ? Icons.weekend_rounded
+                      : isHoliday
+                          ? Icons.celebration_rounded
+                          : isDuty
+                              ? Icons.business_center_rounded
+                              : isLate
+                                  ? Icons.access_time_filled_rounded
+                                  : Icons.business_rounded;
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(badgeIcon, size: 14, color: badgeColor),
+                    const SizedBox(width: 5),
+                    Text(
+                      so.status,
+                      style: TextStyle(
+                        color: badgeColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                ),
+              );
+            }),
           ],
         ),
         const SizedBox(height: 6),
@@ -637,6 +674,7 @@ class _TimelineNode extends StatelessWidget {
 
   static String cleanTag(String raw, int number, bool isLast) {
     final lower = raw.toLowerCase();
+    if (lower.contains('shift ended') || lower.contains('outside shift')) return 'Shift Ended';
     if (lower.contains('late')) return 'Late Arrival';
     if (lower.contains('check') || lower == 'check in' || lower == 'checkin' || lower == 'in') {
       return number <= 1 ? 'Shift In' : 'Presence Scanned';
@@ -681,12 +719,17 @@ class _TimelineNode extends StatelessWidget {
               child: InkWell(
                 borderRadius: BorderRadius.circular(12),
                 onTap: () {
+                  final resolvedTimestamp = (tp.timestamp != null &&
+                          (tp.timestamp!.hour != 0 || tp.timestamp!.minute != 0 || tp.timestamp!.second != 0))
+                      ? tp.timestamp!
+                      : ViewAttendanceRecordScreen.combineDateWithTime(record.date, tp.time);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => ViewAttendanceRecordScreen.fromTouchpoint(
                         touchpoint: tp.copyWith(
                           title: sanitizedTitle,
                           statusTag: sanitizedTag,
+                          timestamp: resolvedTimestamp,
                         ),
                         recordDate: record.date,
                       ),
@@ -774,7 +817,9 @@ class _TimelineNode extends StatelessWidget {
     }
 
     final Color badgeColor;
-    if (t.contains('late')) {
+    if (t.contains('shift ended') || t.contains('outside shift')) {
+      badgeColor = const Color(0xFF6B7280);
+    } else if (t.contains('late')) {
       badgeColor = const Color(0xFFF59E0B);
     } else if (t.contains('out') || t.contains('departure')) {
       badgeColor = const Color(0xFF3B82F6);

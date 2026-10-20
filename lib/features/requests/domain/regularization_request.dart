@@ -18,6 +18,10 @@ class RegularizationRequest {
     this.approverRemarks,
     this.decisionAt,
     required this.createdAt,
+    this.employeeName,
+    this.employeeCode,
+    this.employeeDesignation,
+    this.employeePhotoUrl,
   });
 
   final int id;
@@ -38,6 +42,10 @@ class RegularizationRequest {
   final String? approverRemarks;
   final DateTime? decisionAt;
   final DateTime createdAt;
+  final String? employeeName;
+  final String? employeeCode;
+  final String? employeeDesignation;
+  final String? employeePhotoUrl;
 
   bool get isPending => status.toLowerCase() == 'pending';
   bool get isApproved => status.toLowerCase() == 'approved';

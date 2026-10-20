@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:go_router/go_router.dart';
+import 'package:tks_nexa_attendance/app/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
@@ -60,6 +62,22 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Leave & Duty Requests', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: -0.3)),
+        actions: [
+          IconButton(
+            icon: Builder(
+              builder: (context) {
+                final pendingCount = ref.watch(pendingApprovalsCountProvider);
+                return Badge(
+                  isLabelVisible: pendingCount > 0,
+                  label: Text('$pendingCount'),
+                  child: const Icon(Icons.assignment_turned_in_rounded),
+                );
+              },
+            ),
+            tooltip: 'Manager Approvals',
+            onPressed: () => context.push(AppRoutes.teamApprovals),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Container(

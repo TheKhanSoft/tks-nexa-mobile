@@ -29,6 +29,7 @@ class AttendanceRecord {
     required this.dayName,
     required this.status,
     bool isLate = false,
+    this.isShiftEnded = false,
     this.firstIn,
     this.firstInFormatted,
     this.lastOut,
@@ -53,6 +54,7 @@ class AttendanceRecord {
   final String dayName;
   final String status;
   final bool _isLate;
+  final bool isShiftEnded;
   final String? firstIn;
   final String? firstInFormatted;
   final String? lastOut;
@@ -71,25 +73,52 @@ class AttendanceRecord {
   final String? verificationCode;
 
   bool get isPresent =>
-      status.toLowerCase().contains('present') ||
+      !isShiftEnded &&
+      !isOutsideShift &&
+      (status.toLowerCase().contains('present') ||
       status.toLowerCase().contains('accepted') ||
       status.toLowerCase().contains('matched') ||
-      isLate;
-  bool get isLate => _isLate || status.toLowerCase().contains('late');
+      isLate);
+  bool get isLate => !isShiftEnded && !isOutsideShift && (_isLate || status.toLowerCase().contains('late'));
+  bool get isOutsideShift =>
+      isShiftEnded ||
+      status.toLowerCase().contains('shift ended') ||
+      status.toLowerCase().contains('outside shift');
   bool get isHalfDay => status.toLowerCase().contains('half');
   bool get isOnLeave => status.toLowerCase().contains('leave');
-  bool get isOfficialDuty => status.toLowerCase().contains('duty');
-  bool get isAbsent => status.toLowerCase().contains('absent');
-  bool get isOffDay =>
-      status.toLowerCase().contains('off') ||
+  bool get isOfficialDuty =>
+      status.toLowerCase().contains('duty') ||
+      status.toLowerCase().contains('official') ||
+      status.toLowerCase().contains('od');
+  bool get isHoliday =>
       status.toLowerCase().contains('holiday') ||
-      status.toLowerCase().contains('weekend');
+      status.toLowerCase().contains('gazetted');
+  bool get isWeekend =>
+      status.toLowerCase().contains('weekend') ||
+      status.toLowerCase().contains('weekly off') ||
+      status.toLowerCase().contains('rest day') ||
+      status.toLowerCase() == 'off' ||
+      ((firstIn == null || firstIn == '--:--' || firstIn == 'Pending') &&
+          !isOfficialDuty &&
+          !isHoliday &&
+          !isOnLeave &&
+          !isPresent &&
+          (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday));
+  bool get isAbsent => !isWeekend && !isHoliday && !isOnLeave && status.toLowerCase().contains('absent');
+  bool get isOffDay =>
+      !isOfficialDuty &&
+      (isWeekend ||
+          isHoliday ||
+          status.toLowerCase() == 'off' ||
+          status.toLowerCase().contains('off day') ||
+          status.toLowerCase().contains('weekly off'));
   bool get isFutureOrUpcoming =>
       status.toLowerCase().contains('upcoming') ||
       status.toLowerCase().contains('not joined') ||
       status.toLowerCase().contains('not appointed');
 
   String get formattedNetDuration {
+    if (isOutsideShift) return '--';
     if (firstIn == null || lastOut == null) {
       if (firstIn != null && lastOut == null) return 'In Progress';
       return '--';

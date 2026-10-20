@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/location_reverse_geocode_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/location_evidence.dart';
+import 'package:tks_nexa_attendance/features/attendance/domain/attendance_challenge.dart';
+import 'package:tks_nexa_attendance/features/attendance/domain/geofence_distance_evaluator.dart';
 
 class CurrentLocationCard extends StatefulWidget {
   const CurrentLocationCard({
@@ -12,6 +14,7 @@ class CurrentLocationCard extends StatefulWidget {
     required this.onRefresh,
     this.isReady = true,
     this.onGeocodeResolved,
+    this.challengeLocation,
   });
 
   final LocationEvidence? location;
@@ -21,6 +24,7 @@ class CurrentLocationCard extends StatefulWidget {
   final bool isReady;
   final VoidCallback onRefresh;
   final ValueChanged<GeocodedAddress>? onGeocodeResolved;
+  final AttendanceChallengeLocation? challengeLocation;
 
   @override
   State<CurrentLocationCard> createState() => _CurrentLocationCardState();
@@ -390,6 +394,93 @@ class _CurrentLocationCardState extends State<CurrentLocationCard> {
               ),
             ],
           ),
+
+          // 3. Geofence Radar / Proximity Indicator
+          if (widget.challengeLocation != null &&
+              widget.challengeLocation!.polygon.isNotEmpty) ...[
+            Builder(builder: (context) {
+              final challengeLoc = widget.challengeLocation!;
+              final isInside = GeofenceDistanceEvaluator.isInsidePolygon(
+                loc.latitude,
+                loc.longitude,
+                challengeLoc.polygon,
+              );
+              final distanceMeters = isInside
+                  ? 0.0
+                  : GeofenceDistanceEvaluator.distanceToPolygonMeters(
+                      loc.latitude,
+                      loc.longitude,
+                      challengeLoc.polygon,
+                    );
+
+              if (isInside) {
+                return Container(
+                  margin: const EdgeInsets.only(top: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.3) : const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: isDark ? const Color(0xFF047857) : const Color(0xFFBBF7D0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.verified_rounded, color: Color(0xFF16A34A), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Inside perimeter (${challengeLoc.name})',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF166534),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(top: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF2D2513) : const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: isDark ? const Color(0xFF78350F) : const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.radar_rounded, color: isDark ? Colors.amber.shade300 : Colors.amber.shade700, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '~${distanceMeters.round()}m to perimeter (${challengeLoc.name})',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? const Color(0xFFFCD34D) : const Color(0xFF92400E),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Move within the authorized zone to mark attendance.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
         ],
       ),
     );

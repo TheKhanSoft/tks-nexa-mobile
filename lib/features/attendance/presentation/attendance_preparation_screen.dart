@@ -427,6 +427,7 @@ class _AttendancePreparationScreenState
             isLocationDisabled: _isLocationServiceDisabled,
             isPermissionBlocked: _isLocationPermissionBlocked,
             isReady: locationReady,
+            challengeLocation: challenge.value?.location,
             onRefresh: _handleLocationAction,
             onGeocodeResolved: (geocoded) {
               if (_location != null && geocoded.primaryLocality.isNotEmpty) {

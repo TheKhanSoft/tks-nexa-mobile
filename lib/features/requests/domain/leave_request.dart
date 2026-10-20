@@ -75,6 +75,10 @@ class LeaveRequest {
     this.cancelledAt,
     this.rescheduledAt,
     this.approvals = const [],
+    this.employeeName,
+    this.employeeCode,
+    this.employeeDesignation,
+    this.employeePhotoUrl,
   });
 
   final int id;
@@ -96,6 +100,10 @@ class LeaveRequest {
   final DateTime? cancelledAt;
   final DateTime? rescheduledAt;
   final List<ApprovalStep> approvals;
+  final String? employeeName;
+  final String? employeeCode;
+  final String? employeeDesignation;
+  final String? employeePhotoUrl;
 
   bool get isPending => status.toLowerCase() == 'pending';
   bool get isApproved => status.toLowerCase() == 'approved';
@@ -109,6 +117,9 @@ class RequestsOverview {
     this.pendingLeaveRequests = 0,
     this.pendingDutyRequests = 0,
     this.pendingRegularizationRequests = 0,
+    this.pendingLeaveApprovals = 0,
+    this.pendingDutyApprovals = 0,
+    this.pendingRegularizationApprovals = 0,
     this.upcomingApprovedLeaves = const [],
     this.upcomingApprovedDuties = const [],
   });
@@ -116,7 +127,14 @@ class RequestsOverview {
   final int pendingLeaveRequests;
   final int pendingDutyRequests;
   final int pendingRegularizationRequests;
+  final int pendingLeaveApprovals;
+  final int pendingDutyApprovals;
+  final int pendingRegularizationApprovals;
   final List<LeaveRequest> upcomingApprovedLeaves;
   final List<dynamic> upcomingApprovedDuties;
-}
 
+  int get totalPendingApprovals =>
+      pendingLeaveApprovals +
+      pendingDutyApprovals +
+      pendingRegularizationApprovals;
+}

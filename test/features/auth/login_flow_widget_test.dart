@@ -145,7 +145,7 @@ void main() {
     expect(find.text('Personal details'), findsOneWidget);
     expect(find.text('Officer (BPS-18)'), findsOneWidget);
     expect(find.text('EMP-1'), findsOneWidget);
-    expect(find.text('employee.one'), findsOneWidget);
+    expect(find.text('@employee.one'), findsOneWidget);
     expect(find.text('Active employee'), findsNothing);
     expect(find.text('Grade'), findsNothing);
     expect(find.byType(EmployeeAvatar), findsOneWidget);

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,9 +6,11 @@ import 'package:go_router/go_router.dart';
 import 'package:tks_nexa_attendance/app/app_router.dart';
 import 'package:tks_nexa_attendance/features/account/application/account_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_history_providers.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/regularization_request_bottom_sheet.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/shift_detail_bottom_sheet.dart';
+import 'package:tks_nexa_attendance/features/attendance/application/offline_punch_sync_service.dart';
 
 /// Attendance History page body.
 /// The app-bar and bottom navigation are provided by the parent shell.
@@ -24,6 +27,7 @@ class AttendanceHistoryScreen extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async {
         try {
+          await ref.read(offlinePunchSyncProvider.notifier).syncAll();
           final _ = await ref.refresh(attendanceHistoryResponseProvider.future);
         } catch (_) {}
       },
@@ -31,6 +35,7 @@ class AttendanceHistoryScreen extends ConsumerWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
         children: [
+          const _OfflineOutboxBanner(),
           const _FilterBar(),
           const SizedBox(height: 16),
           historyAsync.when(
@@ -644,34 +649,44 @@ class _RhythmCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           // spaceAround distributes the 7 fixed-width day bubbles evenly.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(7, (i) {
-              final day =
-              DateTime(monday.year, monday.month, monday.day + i);
-              final record = byDay[_dayKey(day)];
-              final statusColor = record == null
-                  ? null
-                  : _StatusStyle.of(record.status, cs, isLate: record.isLate).color;
-              return _RhythmDay(
-                label: _dayLabels[i],
-                dateNum: day.day,
-                statusColor: statusColor,
-                isToday: _dayKey(day) == todayKey,
-              );
-            }),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 16,
-            runSpacing: 6,
-            children: const [
-              _LegendDot(color: _SC.success, label: 'On-Time'),
-              _LegendDot(color: _SC.warning, label: 'Late Arrival'),
-              _LegendDot(color: _SC.leave, label: 'Approved Leave'),
-            ],
-          ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(7, (i) {
+                final day =
+                DateTime(monday.year, monday.month, monday.day + i);
+                final record = byDay[_dayKey(day)];
+                final isWeekendDay = day.weekday == DateTime.saturday || day.weekday == DateTime.sunday;
+                final statusColor = record == null
+                    ? (isWeekendDay ? _SC.weekend : null)
+                    : _StatusStyle.of(
+                        record.status,
+                        cs,
+                        isLate: record.isLate,
+                        date: day,
+                        hasPunches: record.firstIn != null && record.firstIn != '--:--' && record.firstIn != 'Pending',
+                      ).color;
+                return _RhythmDay(
+                  label: _dayLabels[i],
+                  dateNum: day.day,
+                  statusColor: statusColor,
+                  isToday: _dayKey(day) == todayKey,
+                );
+              }),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 6,
+              children: const [
+                _LegendDot(color: _SC.success, label: 'On-Time'),
+                _LegendDot(color: _SC.warning, label: 'Late'),
+                _LegendDot(color: _SC.leave, label: 'Leave'),
+                _LegendDot(color: _SC.duty, label: 'Duty'),
+                _LegendDot(color: _SC.holiday, label: 'Holiday'),
+                _LegendDot(color: _SC.weekend, label: 'Weekend'),
+              ],
+            ),
         ],
       ),
     );
@@ -786,7 +801,18 @@ class _DailyActivityTile extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final style = _StatusStyle.of(record.status, cs, isLate: record.isLate);
+    final hasPunches = (record.firstIn != null && record.firstIn != '--:--' && record.firstIn != 'Pending') ||
+        (record.lastOut != null && record.lastOut != '--:--' && record.lastOut != 'Pending');
+    final style = _StatusStyle.of(
+      record.status,
+      cs,
+      isLate: record.isLate,
+      date: record.date,
+      hasPunches: hasPunches,
+    );
+
+    final isWeekend = style.label == 'Weekend';
+    final isHoliday = style.label == 'Public Holiday';
 
     final inTime = record.firstInFormatted ?? record.firstIn ?? '--:--';
     final outTime = (record.lastOutFormatted != null &&
@@ -800,6 +826,14 @@ class _DailyActivityTile extends StatelessWidget {
                 record.lastOut != 'Pending')
             ? record.lastOut!
             : '--:--';
+
+    final resolvedInTime = isWeekend
+        ? (hasPunches ? inTime : 'Rest Day')
+        : (isHoliday ? (hasPunches ? inTime : 'Holiday') : inTime);
+    final resolvedOutTime = isWeekend
+        ? (hasPunches ? outTime : 'Weekly Off')
+        : (isHoliday ? (hasPunches ? outTime : 'Gazetted') : outTime);
+
     // Leave records label the third cell "Worked", not "Net Duration".
     final durationLabel = record.isOnLeave ? 'Worked' : 'Net Duration';
 
@@ -841,22 +875,14 @@ class _DailyActivityTile extends StatelessWidget {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (record.photoUrl != null && record.photoUrl!.isNotEmpty) ...[
+                            if (hasPunches || record.photoUrl != null) ...[
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
                                 child: Container(
                                   width: 40,
                                   height: 40,
                                   color: style.color.withValues(alpha: 0.15),
-                                  child: Image.network(
-                                    record.photoUrl!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => Icon(
-                                      Icons.camera_alt_rounded,
-                                      size: 18,
-                                      color: style.color,
-                                    ),
-                                  ),
+                                  child: _buildTilePhoto(record, style.color),
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -924,7 +950,7 @@ class _DailyActivityTile extends StatelessWidget {
                               Expanded(
                                 child: _TimeCell(
                                   label: 'Check In',
-                                  value: inTime,
+                                  value: resolvedInTime,
                                   // Late check-in renders in amber.
                                   valueColor:
                                   record.isLate ? _SC.warning : null,
@@ -933,13 +959,13 @@ class _DailyActivityTile extends StatelessWidget {
                               Expanded(
                                 child: _TimeCell(
                                   label: 'Check Out',
-                                  value: outTime,
+                                  value: resolvedOutTime,
                                 ),
                               ),
                               Expanded(
                                 child: _TimeCell(
                                   label: durationLabel,
-                                  value: record.formattedNetDuration,
+                                  value: isWeekend && !hasPunches ? '--' : (isHoliday && !hasPunches ? '--' : record.formattedNetDuration),
                                   valueColor: cs.primary,
                                   alignEnd: true,
                                 ),
@@ -1018,6 +1044,39 @@ class _DailyActivityTile extends StatelessWidget {
       ),
     );
   }
+
+  static Widget _buildTilePhoto(AttendanceRecord record, Color color) {
+    return FutureBuilder<String?>(
+      future: LocalSelfieStorage().getSelfiePath(date: record.date, type: 'check_in', exactOnly: false),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data != null && File(snapshot.data!).existsSync()) {
+          return Image.file(
+            File(snapshot.data!),
+            fit: BoxFit.cover,
+            cacheWidth: 200,
+            cacheHeight: 200,
+            errorBuilder: (_, _, _) => _buildNetworkOrPlaceholder(record, color),
+          );
+        }
+        return _buildNetworkOrPlaceholder(record, color);
+      },
+    );
+  }
+
+  static Widget _buildNetworkOrPlaceholder(AttendanceRecord record, Color color) {
+    if (record.photoUrl != null && record.photoUrl!.isNotEmpty) {
+      return Image.network(
+        record.photoUrl!,
+        fit: BoxFit.cover,
+        cacheWidth: 200,
+        cacheHeight: 200,
+        errorBuilder: (_, _, _) => Icon(Icons.face_rounded, size: 20, color: color),
+      );
+    }
+    return Icon(Icons.face_rounded, size: 20, color: color);
+  }
+
+
 }
 
 class _TimeCell extends StatelessWidget {
@@ -1262,18 +1321,28 @@ class _Pill extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Shared colour constants used by every status-aware widget.
+/// Strictly distinct colours for every category:
+/// - Present / On-Time: Emerald Green
+/// - Late Arrival: Amber
+/// - Approved Leave: Violet / Purple
+/// - Official Duty: Royal Blue
+/// - Public Holiday: Coral Rose
+/// - Weekend / Off: Indigo / Periwinkle
+/// - Absent: Crimson Red
+/// - Shift Ended: Neutral Slate
 abstract final class _SC {
-  static const success = Color(0xFF10B981);
-  static const warning = Color(0xFFF59E0B);
-  static const leave   = Color(0xFF8B5CF6);
-  static const duty    = Color(0xFF2563EB);
-  static const danger  = Color(0xFFEF4444);
-  static const neutral = Color(0xFF6B7280);
+  static const success = Color(0xFF10B981); // Emerald Green
+  static const warning = Color(0xFFF59E0B); // Amber
+  static const leave   = Color(0xFF8B5CF6); // Violet / Purple
+  static const duty    = Color(0xFF2563EB); // Royal Blue
+  static const holiday = Color(0xFFF43F5E); // Coral Rose
+  static const weekend = Color(0xFF6366F1); // Indigo / Periwinkle
+  static const danger  = Color(0xFFEF4444); // Crimson Red
+  static const neutral = Color(0xFF6B7280); // Slate
 }
 
 /// Maps a status string → colour + label + icon + location fallback.
-/// Half-day leave is resolved inside the "leave" branch so a single
-/// `s.contains('leave')` check covers all leave variants cleanly.
+/// Handles Weekend, Holiday, and Official Duty with dedicated icons and distinct colours.
 class _StatusStyle {
   const _StatusStyle({
     required this.color,
@@ -1289,8 +1358,24 @@ class _StatusStyle {
   final IconData placeIcon;
   final String placeFallback;
 
-  factory _StatusStyle.of(String status, ColorScheme cs, {bool isLate = false}) {
+  factory _StatusStyle.of(
+    String status,
+    ColorScheme cs, {
+    bool isLate = false,
+    DateTime? date,
+    bool hasPunches = true,
+  }) {
     final s = status.toLowerCase();
+
+    if (s.contains('shift ended') || s.contains('outside shift')) {
+      return const _StatusStyle(
+        color: _SC.neutral,
+        label: 'Shift Ended',
+        icon: Icons.timer_off_rounded,
+        placeIcon: Icons.business_rounded,
+        placeFallback: 'HQ Office',
+      );
+    }
 
     // Check Late first so it overrides generic present status
     if (isLate || s.contains('late')) {
@@ -1300,6 +1385,41 @@ class _StatusStyle {
         icon: Icons.access_time_filled_rounded,
         placeIcon: Icons.business_rounded,
         placeFallback: 'HQ Office',
+      );
+    }
+
+    // Official Duty: Royal Blue (#2563EB)
+    if (s.contains('duty') || s.contains('official') || s.contains('od')) {
+      return const _StatusStyle(
+        color: _SC.duty,
+        label: 'Official Duty',
+        icon: Icons.business_center_rounded,
+        placeIcon: Icons.business_center_rounded,
+        placeFallback: 'Official assignment',
+      );
+    }
+
+    // Public Holiday: Coral Rose (#F43F5E)
+    if (s.contains('holiday') || s.contains('gazetted')) {
+      return const _StatusStyle(
+        color: _SC.holiday,
+        label: 'Public Holiday',
+        icon: Icons.celebration_rounded,
+        placeIcon: Icons.event_note_rounded,
+        placeFallback: 'Official Holiday',
+      );
+    }
+
+    // Weekend / Weekly Off: Indigo / Periwinkle (#6366F1)
+    final isWeekendDay = date != null && (date.weekday == DateTime.saturday || date.weekday == DateTime.sunday);
+    final isWeekendStatus = s.contains('weekend') || s.contains('weekly off') || s.contains('rest day') || s == 'off';
+    if (isWeekendStatus || (isWeekendDay && (!hasPunches || s.contains('scheduled') || s.contains('absent') || s.isEmpty))) {
+      return const _StatusStyle(
+        color: _SC.weekend,
+        label: 'Weekend',
+        icon: Icons.weekend_rounded,
+        placeIcon: Icons.bedtime_rounded,
+        placeFallback: 'Weekly Rest Day',
       );
     }
 
@@ -1323,15 +1443,6 @@ class _StatusStyle {
         placeIcon: Icons.event_available_rounded,
         placeFallback:
         isHalf ? 'Approved leave (1st Half)' : 'Approved leave',
-      );
-    }
-    if (s.contains('duty')) {
-      return const _StatusStyle(
-        color: _SC.duty,
-        label: 'Official Duty',
-        icon: Icons.business_center_rounded,
-        placeIcon: Icons.business_center_rounded,
-        placeFallback: 'On official duty',
       );
     }
     if (s.contains('absent') || s.contains('rejected')) {
@@ -1440,6 +1551,87 @@ class _EmptyHistoryCard extends StatelessWidget {
             style: TextStyle(color: cs.onSurfaceVariant),
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+class _OfflineOutboxBanner extends ConsumerWidget {
+  const _OfflineOutboxBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncState =
+        ref.watch(offlinePunchSyncProvider).value ?? const OfflineSyncState();
+    if (syncState.pendingCount == 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.amber.shade50,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: Colors.amber.shade300),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Icon(
+                Icons.cloud_off_rounded,
+                color: Colors.amber.shade800,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${syncState.pendingCount} punch${syncState.pendingCount == 1 ? '' : 'es'} pending upload (offline mode)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.amber.shade900,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: syncState.isSyncing
+                    ? null
+                    : () async {
+                        final res = await ref
+                            .read(offlinePunchSyncProvider.notifier)
+                            .syncAll();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                res.syncedCount > 0
+                                    ? 'Successfully uploaded ${res.syncedCount} offline punch${res.syncedCount == 1 ? '' : 'es'}!'
+                                    : (res.errors.isNotEmpty
+                                        ? res.errors.first
+                                        : 'No punches were uploaded.'),
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                icon: syncState.isSyncing
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync_rounded, size: 16),
+                label: Text(syncState.isSyncing ? 'Syncing...' : 'Sync Now'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  foregroundColor: Colors.amber.shade900,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

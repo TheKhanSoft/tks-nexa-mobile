@@ -58,6 +58,7 @@ flutter {
 
 dependencies {
     implementation("com.google.android.play:integrity:1.3.0")
+    implementation("com.scottyab:rootbeer-lib:0.1.1")
 }
 
 fun decodedDartDefines(): Map<String, String> {

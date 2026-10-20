@@ -1,13 +1,16 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tks_nexa_attendance/core/config/app_config.dart';
 import 'package:tks_nexa_attendance/features/account/application/account_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_watermark_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/punch_detail.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/mobile_attendance_log_screen.dart';
+import 'package:tks_nexa_attendance/features/auth/application/auth_providers.dart';
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 
 class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
@@ -46,8 +49,8 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
   }) {
     // Derive date + time
     DateTime ts = touchpoint.timestamp ?? recordDate;
-    if (touchpoint.timestamp == null) {
-      ts = _combineDateWithTime(recordDate, touchpoint.time);
+    if (touchpoint.timestamp == null || (ts.hour == 0 && ts.minute == 0 && ts.second == 0)) {
+      ts = combineDateWithTime(recordDate, touchpoint.time);
     }
 
     final code = touchpoint.displayVerificationCode.isNotEmpty
@@ -81,7 +84,7 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
     final timeStr = isCheckOut
         ? (record.lastOutFormatted ?? record.lastOut)
         : (record.firstInFormatted ?? record.firstIn);
-    final ts = _combineDateWithTime(record.date, timeStr);
+    final ts = combineDateWithTime(record.date, timeStr);
 
     final code = (record.verificationCode != null && record.verificationCode!.trim().isNotEmpty)
         ? record.verificationCode!.trim().toUpperCase()
@@ -98,7 +101,7 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
       longitude: record.longitude,
       locationAddress: record.locationName,
       photoPath: localPhotoPath,
-      snapshotUrl: record.photoUrl,
+      snapshotUrl: isCheckOut ? null : record.photoUrl,
       statusLabel: isCheckOut ? 'Shift Out' : (record.isLate ? 'Late Arrival' : 'Shift In'),
       matchPercentage: record.trustScore?.toDouble() ?? 92.0,
       deviceLabel: record.deviceModel ?? record.deviceName ?? 'Authorized Device',
@@ -128,7 +131,7 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
     );
   }
 
-  static DateTime _combineDateWithTime(DateTime date, String? timeStr) {
+  static DateTime combineDateWithTime(DateTime date, String? timeStr) {
     if (timeStr == null || timeStr.isEmpty || timeStr == '--:--' || timeStr == 'Pending') {
       return date;
     }
@@ -169,16 +172,75 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
 
   Future<void> _lookupLocalPhotoIfNeeded() async {
     if (_resolvedPhotoPath != null && File(_resolvedPhotoPath!).existsSync()) return;
+
     final selfieStorage = ref.read(localSelfieStorageProvider);
-    final pIn = await selfieStorage.getSelfiePath(date: widget.timestamp, type: 'check_in');
-    if (pIn != null && File(pIn).existsSync()) {
-      if (mounted) setState(() => _resolvedPhotoPath = pIn);
+    final isOut = widget.statusLabel.toLowerCase().contains('out') ||
+        widget.statusLabel.toLowerCase().contains('exit');
+
+    // Try match by punch timestamp or verificationCode
+    final pMatch = await selfieStorage.getSelfiePath(
+      date: widget.timestamp,
+      timestamp: widget.timestamp,
+      verificationCode: widget.verificationCode,
+      type: isOut ? 'check_out' : 'check_in',
+      exactOnly: false,
+    );
+    if (pMatch != null && File(pMatch).existsSync()) {
+      if (mounted) setState(() => _resolvedPhotoPath = pMatch);
       return;
     }
-    final pOut = await selfieStorage.getSelfiePath(date: widget.timestamp, type: 'check_out');
-    if (pOut != null && File(pOut).existsSync()) {
-      if (mounted) setState(() => _resolvedPhotoPath = pOut);
+  }
+
+  bool _isAvatarPhoto(String? rawUrl) {
+    if (rawUrl == null || rawUrl.trim().isEmpty) return true;
+    final trimmed = rawUrl.trim();
+    try {
+      final profile = ref.read(employeeProfileProvider).value;
+      final empPhoto = profile?.photoUrl?.trim();
+      if (empPhoto != null && empPhoto.isNotEmpty && trimmed == empPhoto) {
+        return true;
+      }
+    } catch (_) {}
+    final lower = trimmed.toLowerCase();
+    if (lower.contains('/avatars/') || lower.contains('/profiles/') || lower.contains('/profile_photos/')) {
+      return true;
     }
+    return false;
+  }
+
+  String _resolveRemoteUrl(String rawUrl) {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return trimmed;
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+      final config = ref.read(appConfigProvider);
+      if (uri.host == 'localhost' || uri.host.endsWith('.localhost')) {
+        if (config.developmentConnectHost != null && config.developmentConnectHost!.isNotEmpty) {
+          return uri.replace(
+            host: config.developmentConnectHost!.trim(),
+            port: config.developmentConnectPort ?? uri.port,
+          ).toString();
+        }
+      }
+      return trimmed;
+    }
+    final org = ref.read(organizationSessionProvider).value;
+    if (org != null) {
+      final base = org.apiBaseUri;
+      final origin = '${base.scheme}://${base.host}${base.hasPort ? ':${base.port}' : ''}';
+      if (trimmed.startsWith('/')) {
+        return '$origin$trimmed';
+      }
+      return '$origin/$trimmed';
+    }
+    return trimmed;
+  }
+
+  Map<String, String>? _buildAuthHeaders(String rawUrl) {
+    final session = ref.read(currentAuthSessionProvider);
+    final token = session?.accessToken;
+    if (token == null || token.isEmpty) return null;
+    return {'Authorization': 'Bearer $token'};
   }
 
   String get _code {
@@ -210,7 +272,33 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
     final empCode = profile?.employeeCode ?? 'AWK-001';
     final orgName = org?.name.isNotEmpty == true ? org!.name : (org?.code ?? 'awkum');
 
+    Uint8List? rawBytes;
+    if (_resolvedPhotoPath != null && File(_resolvedPhotoPath!).existsSync()) {
+      try {
+        rawBytes = await File(_resolvedPhotoPath!).readAsBytes();
+      } catch (_) {}
+    } else if (widget.snapshotUrl != null &&
+        widget.snapshotUrl!.isNotEmpty &&
+        !_isAvatarPhoto(widget.snapshotUrl)) {
+      try {
+        final resolvedUrl = _resolveRemoteUrl(widget.snapshotUrl!);
+        final headers = _buildAuthHeaders(widget.snapshotUrl!);
+        final dio = Dio();
+        final res = await dio.get<List<int>>(
+          resolvedUrl,
+          options: Options(
+            responseType: ResponseType.bytes,
+            headers: headers,
+          ),
+        );
+        if (res.data != null) {
+          rawBytes = Uint8List.fromList(res.data!);
+        }
+      } catch (_) {}
+    }
+
     return watermarkService.generateWatermarkedImage(
+      originalPhotoBytes: rawBytes,
       photoPath: _resolvedPhotoPath,
       verificationCode: _code,
       timestamp: widget.timestamp,
@@ -603,18 +691,27 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
       return Image.file(
         File(_resolvedPhotoPath!),
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildFallbackPhoto(),
+        cacheWidth: 800,
+        errorBuilder: (_, _, _) => _buildRemoteOrFallbackPhoto(),
       );
     }
+    return _buildRemoteOrFallbackPhoto();
+  }
 
-    if (widget.snapshotUrl != null && widget.snapshotUrl!.isNotEmpty) {
+  Widget _buildRemoteOrFallbackPhoto() {
+    if (widget.snapshotUrl != null &&
+        widget.snapshotUrl!.isNotEmpty &&
+        !_isAvatarPhoto(widget.snapshotUrl)) {
+      final resolvedUrl = _resolveRemoteUrl(widget.snapshotUrl!);
+      final headers = _buildAuthHeaders(widget.snapshotUrl!);
       return Image.network(
-        widget.snapshotUrl!,
+        resolvedUrl,
+        headers: headers,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildFallbackPhoto(),
+        cacheWidth: 800,
+        errorBuilder: (_, _, _) => _buildFallbackPhoto(),
       );
     }
-
     return _buildFallbackPhoto();
   }
 

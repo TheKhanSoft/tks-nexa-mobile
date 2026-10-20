@@ -21,6 +21,8 @@ import 'package:tks_nexa_attendance/features/attendance/presentation/face_captur
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 import 'package:tks_nexa_attendance/features/organization/domain/organization.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/failure_message.dart';
+import 'package:tks_nexa_attendance/features/attendance/application/shift_reminder_service.dart';
+import 'package:tks_nexa_attendance/features/attendance/application/offline_punch_sync_service.dart';
 
 class PhaseOneHomeScreen extends ConsumerStatefulWidget {
   const PhaseOneHomeScreen({super.key});
@@ -56,6 +58,9 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
       _showPasswordChangeRequiredDialog();
       return;
     }
+
+    ref.read(shiftReminderServiceProvider).syncShiftReminders();
+    ref.read(offlinePunchSyncProvider.notifier).syncAll();
   }
 
   Future<void> _logout() async {
@@ -75,6 +80,10 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
       ref.read(employeeProfileProvider.future).then((_) {}, onError: (_) {}),
       ref.read(attendanceHistoryResponseProvider.future).then((_) {}, onError: (_) {}),
     ]);
+    if (mounted) {
+      ref.read(shiftReminderServiceProvider).syncShiftReminders();
+      ref.read(offlinePunchSyncProvider.notifier).syncAll();
+    }
   }
 
   void _openAttendance() {
@@ -638,6 +647,26 @@ class _HomeDashboard extends StatelessWidget {
                     icon: Icons.person_rounded,
                     label: 'My Profile',
                     onTap: onOpenProfile,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _QuickAction(
+                    icon: Icons.event_note_rounded,
+                    label: 'Requests',
+                    onTap: () => context.push(AppRoutes.requests),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _QuickAction(
+                    icon: Icons.assignment_turned_in_rounded,
+                    label: 'Approvals',
+                    onTap: () => context.push(AppRoutes.teamApprovals),
                   ),
                 ),
               ],
@@ -2934,6 +2963,11 @@ class _EmployeeDrawer extends StatelessWidget {
                       icon: Icons.event_note_rounded,
                       label: 'Leave & Duty Requests',
                       onTap: () => openRoute(AppRoutes.requests),
+                    ),
+                    _DrawerMenuTile(
+                      icon: Icons.assignment_turned_in_rounded,
+                      label: 'Manager Approvals',
+                      onTap: () => openRoute(AppRoutes.teamApprovals),
                     ),
                     _DrawerMenuTile(
                       icon: Icons.notifications_rounded,

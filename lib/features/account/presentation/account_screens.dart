@@ -11,6 +11,7 @@ import 'package:tks_nexa_attendance/features/account/presentation/employee_avata
 import 'package:tks_nexa_attendance/features/auth/application/auth_providers.dart';
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/failure_message.dart';
+import 'package:tks_nexa_attendance/features/attendance/application/shift_reminder_service.dart';
 
 class PersonalInformationScreen extends ConsumerWidget {
   const PersonalInformationScreen({super.key});
@@ -315,11 +316,6 @@ class _PersonalProfileHero extends StatelessWidget {
                           icon: Icons.badge_outlined,
                           label: profile.employeeCode,
                         ),
-                      if (profile.username.isNotEmpty)
-                        _HeaderBadge(
-                          icon: Icons.alternate_email_rounded,
-                          label: profile.username,
-                        ),
                     ],
                   ),
                 ],
@@ -353,32 +349,144 @@ class NotificationPreferencesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const _PreferenceScreen(
+    final notifPrefs = ref.watch(shiftNotificationPreferencesProvider).value ??
+        const ShiftNotificationPreferences();
+    final profile = ref.watch(employeeProfileProvider).value;
+    final shift = profile?.assignedShift;
+    final theme = Theme.of(context);
+    final brand = theme.extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
+
+    return _PreferenceScreen(
       title: 'Notifications',
-      subtitle: 'Choose the updates that matter to you.',
+      subtitle: 'Configure automated shift alerts and security notifications.',
+      header: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: .2)),
+        ),
+        color: theme.colorScheme.primary.withValues(alpha: .06),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: .15),
+                foregroundColor: theme.colorScheme.primary,
+                child: const Icon(Icons.schedule_rounded),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      shift != null ? shift.name : 'No Shift Assigned',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      shift != null
+                          ? '${ShiftReminderService.formatTimeString(shift.startTime)} – ${ShiftReminderService.formatTimeString(shift.endTime)}'
+                          : 'Contact your administrator to configure your shift timing.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       children: [
         SwitchListTile(
-          value: true,
-          onChanged: null,
-          secondary: Icon(Icons.alarm_rounded),
-          title: Text('Attendance reminders'),
-          subtitle: Text('Reminders before your shift and missing check-outs.'),
+          value: notifPrefs.shiftRemindersEnabled,
+          onChanged: (val) => ref
+              .read(shiftNotificationPreferencesProvider.notifier)
+              .setShiftRemindersEnabled(val),
+          secondary: const Icon(Icons.alarm_rounded),
+          title: const Text('Shift start reminder'),
+          subtitle: Text(
+            notifPrefs.shiftRemindersEnabled
+                ? 'Alerts ${notifPrefs.leadTimeMinutes} min before your shift starts.'
+                : 'Disabled',
+          ),
         ),
-        Divider(height: 1, indent: 56),
+        if (notifPrefs.shiftRemindersEnabled) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(56, 0, 16, 12),
+            child: Wrap(
+              spacing: 8,
+              children: [5, 10, 15, 30].map((mins) {
+                final isSelected = notifPrefs.leadTimeMinutes == mins;
+                return ChoiceChip(
+                  label: Text('$mins min'),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    if (selected) {
+                      ref
+                          .read(shiftNotificationPreferencesProvider.notifier)
+                          .setLeadTimeMinutes(mins);
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+        const Divider(height: 1, indent: 56),
         SwitchListTile(
-          value: true,
-          onChanged: null,
-          secondary: Icon(Icons.event_repeat_rounded),
-          title: Text('Schedule changes'),
-          subtitle: Text('Changes to shifts, workdays, or holidays.'),
+          value: notifPrefs.shiftEndRemindersEnabled,
+          onChanged: (val) => ref
+              .read(shiftNotificationPreferencesProvider.notifier)
+              .setShiftEndRemindersEnabled(val),
+          secondary: const Icon(Icons.logout_rounded),
+          title: const Text('Shift end reminder'),
+          subtitle: const Text('Reminds you at shift completion so you don\'t miss checking out.'),
         ),
-        Divider(height: 1, indent: 56),
+        const Divider(height: 1, indent: 56),
         SwitchListTile(
-          value: true,
-          onChanged: null,
-          secondary: Icon(Icons.gpp_good_outlined),
-          title: Text('Security alerts'),
-          subtitle: Text('New sign-ins and important account activity.'),
+          value: notifPrefs.scheduleChangesEnabled,
+          onChanged: (val) => ref
+              .read(shiftNotificationPreferencesProvider.notifier)
+              .setScheduleChangesEnabled(val),
+          secondary: const Icon(Icons.event_repeat_rounded),
+          title: const Text('Schedule changes'),
+          subtitle: const Text('Changes to shifts, workdays, or holidays.'),
+        ),
+        const Divider(height: 1, indent: 56),
+        SwitchListTile(
+          value: notifPrefs.securityAlertsEnabled,
+          onChanged: (val) => ref
+              .read(shiftNotificationPreferencesProvider.notifier)
+              .setSecurityAlertsEnabled(val),
+          secondary: const Icon(Icons.gpp_good_outlined),
+          title: const Text('Security alerts'),
+          subtitle: const Text('New sign-ins and important account activity.'),
+        ),
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.notifications_active_outlined),
+          title: const Text('Send test notification'),
+          subtitle: const Text('Preview how shift alerts appear on this device.'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () async {
+            final ok = await ref.read(shiftReminderServiceProvider).sendTestNotification();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    ok
+                        ? 'Test notification sent! Check your device notification shade.'
+                        : 'Notification permission is disabled. Please enable it in system settings.',
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
         ),
       ],
     );

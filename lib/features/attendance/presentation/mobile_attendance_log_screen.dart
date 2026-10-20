@@ -86,12 +86,28 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
 
         final locationName = (locMap['name'] ?? log['location_name'] ?? 'Office Perimeter').toString();
         final deviceModel = (devMap['model'] ?? devMap['platform'] ?? log['device_model'] ?? 'Authorized Device').toString();
-        final snapshotUrl = log['snapshot_url']?.toString();
-
-        final localSelfie = await selfieStorage.getSelfiePath(date: ts, type: 'check_in');
+        final snapshotUrl = log['evidence_photo']?.toString() ??
+            log['captured_photo_url']?.toString() ??
+            log['punch_photo']?.toString() ??
+            log['punch_photo_url']?.toString() ??
+            log['snapshot_url']?.toString() ??
+            log['attendance_photo']?.toString() ??
+            log['verification_photo']?.toString() ??
+            log['selfie_url']?.toString() ??
+            log['face_photo_url']?.toString();
 
         final verMethod = (log['verification_method'] ?? 'Face Biometric').toString().toLowerCase();
         final isExit = verMethod.contains('exit') || verMethod.contains('out');
+
+        final vCode = log['verification_code']?.toString() ?? log['code']?.toString();
+        final localSelfie = await selfieStorage.getSelfiePath(
+          date: ts,
+          timestamp: ts,
+          id: id,
+          verificationCode: vCode,
+          type: isExit ? 'check_out' : 'check_in',
+          exactOnly: false,
+        );
 
         items.add(
           MobilePunchLogItem(
@@ -106,7 +122,7 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
             deviceModel: deviceModel,
             photoPath: localSelfie,
             photoUrl: snapshotUrl,
-            verificationCode: log['verification_code']?.toString() ?? log['code']?.toString(),
+            verificationCode: vCode,
           ),
         );
       }
@@ -122,10 +138,17 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
     final items = <MobilePunchLogItem>[];
     for (final rec in historyAsync.records) {
       if (rec.firstIn != null && rec.firstIn != '--:--' && rec.firstIn != 'Pending') {
-        final selfiePath = await selfieStorage.getSelfiePath(date: rec.date, type: 'check_in');
-        final isPresent = rec.isPresent;
         final inTimeStr = rec.firstInFormatted ?? rec.firstIn!;
         final inDt = _combineDateAndTime(rec.date, inTimeStr);
+        final selfiePath = await selfieStorage.getSelfiePath(
+          date: rec.date,
+          timestamp: inDt,
+          id: '${rec.id}-in',
+          verificationCode: rec.verificationCode,
+          type: 'check_in',
+          exactOnly: false,
+        );
+        final isPresent = rec.isPresent;
         items.add(
           MobilePunchLogItem(
             id: '${rec.id}-in',
@@ -144,9 +167,16 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
         );
       }
       if (rec.lastOut != null && rec.lastOut != '--:--' && rec.lastOut != 'Pending' && rec.lastOut != rec.firstIn) {
-        final selfiePath = await selfieStorage.getSelfiePath(date: rec.date, type: 'check_out');
         final outTimeStr = rec.lastOutFormatted ?? rec.lastOut!;
         final outDt = _combineDateAndTime(rec.date, outTimeStr);
+        final selfiePath = await selfieStorage.getSelfiePath(
+          date: rec.date,
+          timestamp: outDt,
+          id: '${rec.id}-out',
+          verificationCode: rec.verificationCode,
+          type: 'check_out',
+          exactOnly: false,
+        );
         items.add(
           MobilePunchLogItem(
             id: '${rec.id}-out',
@@ -159,7 +189,7 @@ final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) a
             locationName: rec.locationName ?? 'Office Perimeter',
             deviceModel: rec.deviceModel ?? rec.deviceLabel ?? 'Authorized Device',
             photoPath: selfiePath,
-            photoUrl: rec.photoUrl,
+            photoUrl: null,
             verificationCode: rec.verificationCode,
           ),
         );
@@ -326,12 +356,7 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
                                   width: 48,
                                   height: 48,
                                   color: theme.colorScheme.primaryContainer,
-                                  child: log.photoPath != null && File(log.photoPath!).existsSync()
-                                      ? Image.file(
-                                          File(log.photoPath!),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : Icon(Icons.face_rounded, color: theme.colorScheme.primary, size: 28),
+                                  child: _buildLogThumbnail(log, theme),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -400,6 +425,45 @@ class MobileAttendanceLogScreen extends ConsumerWidget {
             );
           },
         ),
+      ),
+    );
+  }
+
+  static Widget _buildLogThumbnail(MobilePunchLogItem log, ThemeData theme) {
+    if (log.photoPath != null && File(log.photoPath!).existsSync()) {
+      return Image.file(
+        File(log.photoPath!),
+        fit: BoxFit.cover,
+        cacheWidth: 200,
+        cacheHeight: 200,
+        errorBuilder: (_, _, _) => _buildRemoteOrFallback(log, theme),
+      );
+    }
+    return _buildRemoteOrFallback(log, theme);
+  }
+
+  static Widget _buildRemoteOrFallback(MobilePunchLogItem log, ThemeData theme) {
+    if (log.photoUrl != null && log.photoUrl!.isNotEmpty) {
+      return Image.network(
+        log.photoUrl!,
+        fit: BoxFit.cover,
+        cacheWidth: 200,
+        cacheHeight: 200,
+        errorBuilder: (_, _, _) => _fallbackLogIcon(log, theme),
+      );
+    }
+    return _fallbackLogIcon(log, theme);
+  }
+
+  static Widget _fallbackLogIcon(MobilePunchLogItem log, ThemeData theme) {
+    final isOut = log.typeLabel.toLowerCase().contains('out');
+    final isPass = log.matchScore >= log.threshold;
+    final color = isPass ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+    return Center(
+      child: Icon(
+        isOut ? Icons.logout_rounded : Icons.login_rounded,
+        color: color,
+        size: 24,
       ),
     );
   }

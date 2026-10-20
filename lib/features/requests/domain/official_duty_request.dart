@@ -42,6 +42,10 @@ class OfficialDutyRequest {
     this.approverName,
     this.referenceNumber,
     this.remarks,
+    this.employeeName,
+    this.employeeCode,
+    this.employeeDesignation,
+    this.employeePhotoUrl,
   });
 
   final int id;
@@ -64,6 +68,10 @@ class OfficialDutyRequest {
   final String? approverName;
   final String? referenceNumber;
   final String? remarks;
+  final String? employeeName;
+  final String? employeeCode;
+  final String? employeeDesignation;
+  final String? employeePhotoUrl;
 
   bool get isPending => status.toLowerCase() == 'pending';
   bool get isApproved => status.toLowerCase() == 'approved';

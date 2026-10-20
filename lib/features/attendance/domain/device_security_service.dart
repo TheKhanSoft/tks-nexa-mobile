@@ -21,6 +21,34 @@ class DeviceKeyDetails {
   final String osVersion;
 }
 
+class DeviceSecurityStatus {
+  const DeviceSecurityStatus({
+    this.isRooted = false,
+    this.isHooked = false,
+    this.isTampered = false,
+    this.details,
+  });
+
+  final bool isRooted;
+  final bool isHooked;
+  final bool isTampered;
+  final String? details;
+}
+
+class WifiNetworkEvidence {
+  const WifiNetworkEvidence({
+    this.isWifiConnected = false,
+    this.bssid,
+    this.ssid,
+    this.gatewayIp,
+  });
+
+  final bool isWifiConnected;
+  final String? bssid;
+  final String? ssid;
+  final String? gatewayIp;
+}
+
 abstract interface class DeviceSecurityService {
   Future<DeviceKeyDetails?> getDeviceKey();
 
@@ -29,4 +57,8 @@ abstract interface class DeviceSecurityService {
     required String integrityNonce,
     required bool requireIntegrity,
   });
+
+  Future<DeviceSecurityStatus> checkDeviceSecurity();
+
+  Future<WifiNetworkEvidence> getWifiDetails();
 }

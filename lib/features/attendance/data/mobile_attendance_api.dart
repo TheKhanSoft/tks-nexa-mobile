@@ -97,6 +97,7 @@ class MobileAttendanceApi implements MobileAttendanceService {
   }
 
   @override
+  @override
   Future<AttendanceMarkResult> markAttendance(
     AttendanceMarkRequest request,
   ) async {
@@ -114,20 +115,25 @@ class MobileAttendanceApi implements MobileAttendanceService {
         diagnosticCode: 'LIVENESS_FAILED',
       );
     }
+    return submitRawPunchPayload(request.toJson());
+  }
+
+  @override
+  Future<AttendanceMarkResult> submitRawPunchPayload(Map<String, dynamic> payload) async {
     Response<dynamic> response;
     try {
       try {
         response = await _dio.post<dynamic>(
           submitAttendancePath,
           options: _authorized,
-          data: request.toJson(),
+          data: payload,
         );
       } on DioException catch (e) {
         if (e.response?.statusCode == 404 || e.response?.statusCode == 405) {
           response = await _dio.post<dynamic>(
             'v1/attendance/clock-in',
             options: _authorized,
-            data: request.toJson(),
+            data: payload,
           );
         } else {
           rethrow;
@@ -463,8 +469,16 @@ class MobileAttendanceApi implements MobileAttendanceService {
         verificationCode: tpm['verification_code']?.toString() ?? tpm['code']?.toString(),
         latitude: rawLat is num ? rawLat.toDouble() : (rawLat is String ? double.tryParse(rawLat) : null),
         longitude: rawLng is num ? rawLng.toDouble() : (rawLng is String ? double.tryParse(rawLng) : null),
-        snapshotUrl: tpm['snapshot_url']?.toString(),
-        timestamp: parsedTs,
+        snapshotUrl: tpm['evidence_photo']?.toString() ??
+            tpm['captured_photo_url']?.toString() ??
+            tpm['punch_photo']?.toString() ??
+            tpm['punch_photo_url']?.toString() ??
+            tpm['snapshot_url']?.toString() ??
+            tpm['attendance_photo']?.toString() ??
+            tpm['verification_photo']?.toString() ??
+            tpm['selfie_url']?.toString() ??
+            tpm['face_photo_url']?.toString(),
+        timestamp: parsedTs ?? _combineDateWithTimeStr(fallbackDate, _string(tpm['time'], fallback: '--:--')),
       );
     }).toList(growable: false);
 
@@ -508,6 +522,30 @@ class MobileAttendanceApi implements MobileAttendanceService {
     if (val is num) return val.round();
     if (val is String) return int.tryParse(val) ?? fallback;
     return fallback;
+  }
+
+  static DateTime? _combineDateWithTimeStr(String dateStr, String timeStr) {
+    final d = DateTime.tryParse(dateStr);
+    if (d == null) return null;
+    if (timeStr.isEmpty || timeStr == '--:--' || timeStr == 'Pending') return d;
+    try {
+      final s = timeStr.trim();
+      final match12 = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$', caseSensitive: false).firstMatch(s);
+      if (match12 != null) {
+        var hour = int.parse(match12.group(1)!);
+        final min = int.parse(match12.group(2)!);
+        final sec = match12.group(3) != null ? int.parse(match12.group(3)!) : 0;
+        final period = match12.group(4)!.toUpperCase();
+        if (period == 'PM' && hour < 12) hour += 12;
+        if (period == 'AM' && hour == 12) hour = 0;
+        return DateTime(d.year, d.month, d.day, hour, min, sec);
+      }
+      final parts = s.split(':');
+      if (parts.length >= 2) {
+        return DateTime(d.year, d.month, d.day, int.parse(parts[0]), int.parse(parts[1]));
+      }
+    } catch (_) {}
+    return d;
   }
 
   static AttendanceHistoryResponse _fallbackHistoryResponse() {

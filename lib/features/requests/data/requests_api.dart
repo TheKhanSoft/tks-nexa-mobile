@@ -62,46 +62,41 @@ class RequestsApi {
       );
       final root = _asMap(response.data);
       final list = root['data'] is List ? root['data'] as List : const [];
-      return list.whereType<Map>().map((map) {
-        final m = Map<String, dynamic>.from(map);
-        final lt = m['leave_type'] is Map ? Map<String, dynamic>.from(m['leave_type']) : {};
-        final approvalsList = m['approvals'] is List ? m['approvals'] as List : const [];
-        final approvals = approvalsList.whereType<Map>().map((a) {
-          final am = Map<String, dynamic>.from(a);
-          return ApprovalStep(
-            id: _int(am['id']),
-            approverName: _string(am['approver_name'], fallback: 'Manager'),
-            action: _string(am['action'], fallback: 'Pending'),
-            comments: _stringOpt(am['comments']),
-            decidedAt: _dateTime(am['decided_at']),
-          );
-        }).toList(growable: false);
-
-        final markedTo = m['marked_to'] is Map ? Map<String, dynamic>.from(m['marked_to']) : null;
-        return LeaveRequest(
-          id: _int(m['id']),
-          publicId: _string(m['public_id']),
-          reference: _string(m['reference']),
-          leaveTypeName: _string(lt['name'], fallback: 'Leave'),
-          startDate: _date(m['start_date']),
-          endDate: _date(m['end_date']),
-          formattedDates: _string(m['formatted_dates'], fallback: '${m['start_date']} – ${m['end_date']}'),
-          daysCount: _int(m['days_count'], fallback: 1),
-          approvedDaysCount: m['approved_days_count'] != null ? _int(m['approved_days_count']) : null,
-          status: _string(m['status'], fallback: 'Pending'),
-          reason: _string(m['reason']),
-          createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
-          canCancel: m['can_cancel'] == true,
-          canReschedule: m['can_reschedule'] == true,
-          markedToName: markedTo != null ? _stringOpt(markedTo['name']) : null,
-          cancellationReason: _stringOpt(m['cancellation_reason']),
-          cancelledAt: _dateTime(m['cancelled_at']),
-          rescheduledAt: _dateTime(m['rescheduled_at']),
-          approvals: approvals,
-        );
-      }).toList(growable: false);
+      return list.whereType<Map>().map((map) => _parseLeave(Map<String, dynamic>.from(map))).toList(growable: false);
     } on DioException catch (error) {
       throw _failureFor(error, fallback: 'Unable to load leave requests.');
+    }
+  }
+
+  Future<List<LeaveRequest>> fetchPendingLeaveApprovals({int? year}) async {
+    try {
+      Response<dynamic> response;
+      try {
+        response = await _dio.get<dynamic>(
+          'v1/leaves/pending-approvals',
+          queryParameters: {if (year != null) 'year': year},
+          options: _authorized,
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) {
+          response = await _dio.get<dynamic>(
+            'v1/leaves',
+            queryParameters: {
+              'scope': 'approvals',
+              'status': 'pending',
+              if (year != null) 'year': year,
+            },
+            options: _authorized,
+          );
+        } else {
+          rethrow;
+        }
+      }
+      final root = _asMap(response.data);
+      final list = root['data'] is List ? root['data'] as List : const [];
+      return list.whereType<Map>().map((map) => _parseLeave(Map<String, dynamic>.from(map))).toList(growable: false);
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Unable to load pending leave approvals.');
     }
   }
 
@@ -162,6 +157,36 @@ class RequestsApi {
     }
   }
 
+  Future<void> approveLeave(int id, {String? comments, int? approvedDaysCount}) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/leaves/$id/approve',
+        data: {
+          if (comments != null && comments.trim().isNotEmpty) 'comments': comments.trim(),
+          if (approvedDaysCount != null) 'approved_days_count': approvedDaysCount,
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Leave request could not be approved.');
+    }
+  }
+
+  Future<void> rejectLeave(int id, {required String reason}) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/leaves/$id/reject',
+        data: {
+          'reason': reason.trim(),
+          'comments': reason.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Leave request could not be rejected.');
+    }
+  }
+
   Future<List<OfficialDutyTypeOption>> fetchOfficialDutyTypes() async {
     return const [
       OfficialDutyTypeOption(key: 'official_tour', label: 'Official Tour'),
@@ -207,34 +232,41 @@ class RequestsApi {
       );
       final root = _asMap(response.data);
       final list = root['data'] is List ? root['data'] as List : const [];
-      return list.whereType<Map>().map((map) {
-        final m = Map<String, dynamic>.from(map);
-        final ho = m['host_office'] is Map ? Map<String, dynamic>.from(m['host_office']) : {};
-        return OfficialDutyRequest(
-          id: _int(m['id']),
-          publicId: _string(m['public_id']),
-          reference: _string(m['reference']),
-          dutyType: _string(m['duty_type']),
-          dutyTypeLabel: _string(m['duty_type_label'], fallback: 'Official Duty'),
-          startDate: _date(m['start_date']),
-          endDate: _date(m['end_date']),
-          formattedDates: _string(m['formatted_dates'], fallback: '${m['start_date']} – ${m['end_date']}'),
-          daysCount: _int(m['days_count'], fallback: 1),
-          location: _string(m['location']),
-          hostOfficeName: _string(ho['name'], fallback: 'Main Office'),
-          purpose: _string(m['purpose']),
-          isRetrospective: m['is_retrospective'] == true,
-          hasDocument: m['has_document'] == true,
-          status: _string(m['status'], fallback: 'Pending'),
-          createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
-          documentUrl: _stringOpt(m['document_url']),
-          approverName: _stringOpt(m['approver_name']),
-          referenceNumber: _stringOpt(m['reference_number']),
-          remarks: _stringOpt(m['remarks']),
-        );
-      }).toList(growable: false);
+      return list.whereType<Map>().map((map) => _parseDuty(Map<String, dynamic>.from(map))).toList(growable: false);
     } on DioException catch (error) {
       throw _failureFor(error, fallback: 'Unable to load official duty requests.');
+    }
+  }
+
+  Future<List<OfficialDutyRequest>> fetchPendingDutyApprovals({int? year}) async {
+    try {
+      Response<dynamic> response;
+      try {
+        response = await _dio.get<dynamic>(
+          'v1/official-duties/pending-approvals',
+          queryParameters: {if (year != null) 'year': year},
+          options: _authorized,
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) {
+          response = await _dio.get<dynamic>(
+            'v1/official-duties',
+            queryParameters: {
+              'scope': 'approvals',
+              'status': 'pending',
+              if (year != null) 'year': year,
+            },
+            options: _authorized,
+          );
+        } else {
+          rethrow;
+        }
+      }
+      final root = _asMap(response.data);
+      final list = root['data'] is List ? root['data'] as List : const [];
+      return list.whereType<Map>().map((map) => _parseDuty(Map<String, dynamic>.from(map))).toList(growable: false);
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Unable to load pending official duty approvals.');
     }
   }
 
@@ -277,6 +309,35 @@ class RequestsApi {
     }
   }
 
+  Future<void> approveOfficialDuty(int id, {String? remarks}) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/official-duties/$id/approve',
+        data: {
+          if (remarks != null && remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Official duty request could not be approved.');
+    }
+  }
+
+  Future<void> rejectOfficialDuty(int id, {required String reason}) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/official-duties/$id/reject',
+        data: {
+          'reason': reason.trim(),
+          'remarks': reason.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Official duty request could not be rejected.');
+    }
+  }
+
   Future<List<RegularizationRequest>> fetchRegularizations({String? status, int? year}) async {
     try {
       final response = await _dio.get<dynamic>(
@@ -289,31 +350,41 @@ class RequestsApi {
       );
       final root = _asMap(response.data);
       final list = root['data'] is List ? root['data'] as List : const [];
-      return list.whereType<Map>().map((map) {
-        final m = Map<String, dynamic>.from(map);
-        return RegularizationRequest(
-          id: _int(m['id']),
-          publicId: _string(m['public_id']),
-          reference: _string(m['reference']),
-          date: _date(m['date']),
-          formattedDate: _string(m['formatted_date'], fallback: _string(m['date'])),
-          punchType: _string(m['punch_type']),
-          punchTypeLabel: _string(m['punch_type_label'], fallback: 'Regularization'),
-          requestedPunchTime: _stringOpt(m['requested_punch_time']),
-          formattedTime: _stringOpt(m['formatted_time']),
-          reason: _string(m['reason']),
-          reasonLabel: _string(m['reason_label'], fallback: _string(m['reason'])),
-          employeeRemarks: _stringOpt(m['employee_remarks']),
-          status: _string(m['status'], fallback: 'pending'),
-          statusLabel: _string(m['status_label'], fallback: 'Pending'),
-          approverName: _stringOpt(m['approver_name']),
-          approverRemarks: _stringOpt(m['approver_remarks']),
-          decisionAt: _dateTime(m['decision_at']),
-          createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
-        );
-      }).toList(growable: false);
+      return list.whereType<Map>().map((map) => _parseRegularization(Map<String, dynamic>.from(map))).toList(growable: false);
     } on DioException catch (error) {
       throw _failureFor(error, fallback: 'Unable to load attendance regularizations.');
+    }
+  }
+
+  Future<List<RegularizationRequest>> fetchPendingRegularizationApprovals({int? year}) async {
+    try {
+      Response<dynamic> response;
+      try {
+        response = await _dio.get<dynamic>(
+          'v1/regularizations/pending-approvals',
+          queryParameters: {if (year != null) 'year': year},
+          options: _authorized,
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404) {
+          response = await _dio.get<dynamic>(
+            'v1/regularizations',
+            queryParameters: {
+              'scope': 'approvals',
+              'status': 'pending',
+              if (year != null) 'year': year,
+            },
+            options: _authorized,
+          );
+        } else {
+          rethrow;
+        }
+      }
+      final root = _asMap(response.data);
+      final list = root['data'] is List ? root['data'] as List : const [];
+      return list.whereType<Map>().map((map) => _parseRegularization(Map<String, dynamic>.from(map))).toList(growable: false);
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Unable to load pending regularization approvals.');
     }
   }
 
@@ -342,6 +413,35 @@ class RequestsApi {
     }
   }
 
+  Future<void> approveRegularization(int id, {String? remarks}) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/regularizations/$id/approve',
+        data: {
+          if (remarks != null && remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Regularization could not be approved.');
+    }
+  }
+
+  Future<void> rejectRegularization(int id, {required String reason}) async {
+    try {
+      await _dio.post<dynamic>(
+        'v1/regularizations/$id/reject',
+        data: {
+          'reason': reason.trim(),
+          'remarks': reason.trim(),
+        },
+        options: _authorized,
+      );
+    } on DioException catch (error) {
+      throw _failureFor(error, fallback: 'Regularization could not be rejected.');
+    }
+  }
+
   Future<RequestsOverview> fetchRequestsOverview() async {
     try {
       final response = await _dio.get<dynamic>(
@@ -354,10 +454,118 @@ class RequestsApi {
         pendingLeaveRequests: _int(data['pending_leave_requests']),
         pendingDutyRequests: _int(data['pending_duty_requests']),
         pendingRegularizationRequests: _int(data['pending_regularization_requests']),
+        pendingLeaveApprovals: _int(data['pending_leave_approvals'] ?? data['pending_approvals_leaves']),
+        pendingDutyApprovals: _int(data['pending_duty_approvals'] ?? data['pending_approvals_duties']),
+        pendingRegularizationApprovals: _int(data['pending_regularization_approvals'] ?? data['pending_approvals_regularizations']),
       );
     } on Object {
       return const RequestsOverview();
     }
+  }
+
+  static LeaveRequest _parseLeave(Map<String, dynamic> m) {
+    final lt = m['leave_type'] is Map ? Map<String, dynamic>.from(m['leave_type']) : {};
+    final approvalsList = m['approvals'] is List ? m['approvals'] as List : const [];
+    final approvals = approvalsList.whereType<Map>().map((a) {
+      final am = Map<String, dynamic>.from(a);
+      return ApprovalStep(
+        id: _int(am['id']),
+        approverName: _string(am['approver_name'], fallback: 'Manager'),
+        action: _string(am['action'], fallback: 'Pending'),
+        comments: _stringOpt(am['comments']),
+        decidedAt: _dateTime(am['decided_at']),
+      );
+    }).toList(growable: false);
+
+    final markedTo = m['marked_to'] is Map ? Map<String, dynamic>.from(m['marked_to']) : null;
+    final emp = m['employee'] is Map ? Map<String, dynamic>.from(m['employee']) : null;
+
+    return LeaveRequest(
+      id: _int(m['id']),
+      publicId: _string(m['public_id']),
+      reference: _string(m['reference']),
+      leaveTypeName: _string(lt['name'], fallback: 'Leave'),
+      startDate: _date(m['start_date']),
+      endDate: _date(m['end_date']),
+      formattedDates: _string(m['formatted_dates'], fallback: '${m['start_date']} – ${m['end_date']}'),
+      daysCount: _int(m['days_count'], fallback: 1),
+      approvedDaysCount: m['approved_days_count'] != null ? _int(m['approved_days_count']) : null,
+      status: _string(m['status'], fallback: 'Pending'),
+      reason: _string(m['reason']),
+      createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
+      canCancel: m['can_cancel'] == true,
+      canReschedule: m['can_reschedule'] == true,
+      markedToName: markedTo != null ? _stringOpt(markedTo['name']) : null,
+      cancellationReason: _stringOpt(m['cancellation_reason']),
+      cancelledAt: _dateTime(m['cancelled_at']),
+      rescheduledAt: _dateTime(m['rescheduled_at']),
+      approvals: approvals,
+      employeeName: emp != null ? _stringOpt(emp['name']) : _stringOpt(m['employee_name']),
+      employeeCode: emp != null ? _stringOpt(emp['employee_code'] ?? emp['code']) : _stringOpt(m['employee_code']),
+      employeeDesignation: emp != null ? _stringOpt(emp['designation']) : _stringOpt(m['employee_designation']),
+      employeePhotoUrl: emp != null ? _stringOpt(emp['photo_url'] ?? emp['avatar']) : _stringOpt(m['employee_photo_url']),
+    );
+  }
+
+  static OfficialDutyRequest _parseDuty(Map<String, dynamic> m) {
+    final ho = m['host_office'] is Map ? Map<String, dynamic>.from(m['host_office']) : {};
+    final emp = m['employee'] is Map ? Map<String, dynamic>.from(m['employee']) : null;
+
+    return OfficialDutyRequest(
+      id: _int(m['id']),
+      publicId: _string(m['public_id']),
+      reference: _string(m['reference']),
+      dutyType: _string(m['duty_type']),
+      dutyTypeLabel: _string(m['duty_type_label'], fallback: 'Official Duty'),
+      startDate: _date(m['start_date']),
+      endDate: _date(m['end_date']),
+      formattedDates: _string(m['formatted_dates'], fallback: '${m['start_date']} – ${m['end_date']}'),
+      daysCount: _int(m['days_count'], fallback: 1),
+      location: _string(m['location']),
+      hostOfficeName: _string(ho['name'], fallback: 'Main Office'),
+      purpose: _string(m['purpose']),
+      isRetrospective: m['is_retrospective'] == true,
+      hasDocument: m['has_document'] == true,
+      status: _string(m['status'], fallback: 'Pending'),
+      createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
+      documentUrl: _stringOpt(m['document_url']),
+      approverName: _stringOpt(m['approver_name']),
+      referenceNumber: _stringOpt(m['reference_number']),
+      remarks: _stringOpt(m['remarks']),
+      employeeName: emp != null ? _stringOpt(emp['name']) : _stringOpt(m['employee_name']),
+      employeeCode: emp != null ? _stringOpt(emp['employee_code'] ?? emp['code']) : _stringOpt(m['employee_code']),
+      employeeDesignation: emp != null ? _stringOpt(emp['designation']) : _stringOpt(m['employee_designation']),
+      employeePhotoUrl: emp != null ? _stringOpt(emp['photo_url'] ?? emp['avatar']) : _stringOpt(m['employee_photo_url']),
+    );
+  }
+
+  static RegularizationRequest _parseRegularization(Map<String, dynamic> m) {
+    final emp = m['employee'] is Map ? Map<String, dynamic>.from(m['employee']) : null;
+
+    return RegularizationRequest(
+      id: _int(m['id']),
+      publicId: _string(m['public_id']),
+      reference: _string(m['reference']),
+      date: _date(m['date']),
+      formattedDate: _string(m['formatted_date'], fallback: _string(m['date'])),
+      punchType: _string(m['punch_type']),
+      punchTypeLabel: _string(m['punch_type_label'], fallback: 'Regularization'),
+      requestedPunchTime: _stringOpt(m['requested_punch_time']),
+      formattedTime: _stringOpt(m['formatted_time']),
+      reason: _string(m['reason']),
+      reasonLabel: _string(m['reason_label'], fallback: _string(m['reason'])),
+      employeeRemarks: _stringOpt(m['employee_remarks']),
+      status: _string(m['status'], fallback: 'pending'),
+      statusLabel: _string(m['status_label'], fallback: 'Pending'),
+      approverName: _stringOpt(m['approver_name']),
+      approverRemarks: _stringOpt(m['approver_remarks']),
+      decisionAt: _dateTime(m['decision_at']),
+      createdAt: _dateTime(m['created_at']) ?? DateTime.now(),
+      employeeName: emp != null ? _stringOpt(emp['name']) : _stringOpt(m['employee_name']),
+      employeeCode: emp != null ? _stringOpt(emp['employee_code'] ?? emp['code']) : _stringOpt(m['employee_code']),
+      employeeDesignation: emp != null ? _stringOpt(emp['designation']) : _stringOpt(m['employee_designation']),
+      employeePhotoUrl: emp != null ? _stringOpt(emp['photo_url'] ?? emp['avatar']) : _stringOpt(m['employee_photo_url']),
+    );
   }
 
   static Map<String, dynamic> _asMap(Object? value) {

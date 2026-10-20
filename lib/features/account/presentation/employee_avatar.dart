@@ -74,6 +74,8 @@ class EmployeeAvatar extends StatelessWidget {
                     alignment: Alignment.topCenter,
                     width: size,
                     height: size,
+                    cacheWidth: (size * 2.5).round().clamp(120, 400),
+                    cacheHeight: (size * 2.5).round().clamp(120, 400),
                     gaplessPlayback: true,
                     webHtmlElementStrategy: source.webHtmlElementStrategy,
                     frameBuilder:

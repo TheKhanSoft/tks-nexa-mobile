@@ -73,8 +73,13 @@ class AttendanceMarkRequest {
       'latitude': location.latitude,
       'longitude': location.longitude,
       'horizontal_accuracy': location.horizontalAccuracyM,
-      if (locName != null && locName.isNotEmpty) 'location_name': locName,
       'is_mocked': location.isMocked,
+      if (location.wifiBssid != null && location.wifiBssid!.isNotEmpty)
+        'wifi_bssid': location.wifiBssid!,
+      if (location.wifiSsid != null && location.wifiSsid!.isNotEmpty)
+        'wifi_ssid': location.wifiSsid!,
+      if (location.wifiGatewayIp != null && location.wifiGatewayIp!.isNotEmpty)
+        'wifi_gateway_ip': location.wifiGatewayIp!,
       if (snapshotBase64 != null) 'snapshot_base64': snapshotBase64!,
       'device_details': <String, Object>{
         'device_id': deviceId,
@@ -89,6 +94,12 @@ class AttendanceMarkRequest {
         if (locName != null && locName.isNotEmpty) 'location_name': locName,
         'captured_at': location.capturedAt.toUtc().toIso8601String(),
         'is_mocked': location.isMocked,
+        if (location.wifiBssid != null && location.wifiBssid!.isNotEmpty)
+          'wifi_bssid': location.wifiBssid!,
+        if (location.wifiSsid != null && location.wifiSsid!.isNotEmpty)
+          'wifi_ssid': location.wifiSsid!,
+        if (location.wifiGatewayIp != null && location.wifiGatewayIp!.isNotEmpty)
+          'wifi_gateway_ip': location.wifiGatewayIp!,
       },
       'biometrics': <String, Object>{
         'similarity_score': clampedScore,
@@ -118,6 +129,7 @@ class AttendanceMarkResult {
     this.trustScore,
     this.trustLevel,
     this.cameraCorroboration,
+    this.isOffline = false,
   });
 
   final String message;
@@ -128,4 +140,5 @@ class AttendanceMarkResult {
   final int? trustScore;
   final String? trustLevel;
   final CameraCorroborationResult? cameraCorroboration;
+  final bool isOffline;
 }

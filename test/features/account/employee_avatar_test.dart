@@ -30,7 +30,10 @@ void main() {
     await tester.pumpWidget(subject(photoUrl: url));
 
     final image = tester.widget<Image>(find.byType(Image));
-    final provider = image.image as NetworkImage;
+    final imageProvider = image.image;
+    final provider = imageProvider is ResizeImage
+        ? imageProvider.imageProvider as NetworkImage
+        : imageProvider as NetworkImage;
     expect(provider.url, url);
     expect(provider.headers, isNull);
   });
@@ -42,7 +45,10 @@ void main() {
     await tester.pumpWidget(subject(photoUrl: url, authToken: 'sanctum-token'));
 
     final image = tester.widget<Image>(find.byType(Image));
-    final provider = image.image as NetworkImage;
+    final imageProvider = image.image;
+    final provider = imageProvider is ResizeImage
+        ? imageProvider.imageProvider as NetworkImage
+        : imageProvider as NetworkImage;
     expect(provider.url, url);
     expect(provider.headers, {'Authorization': 'Bearer sanctum-token'});
   });
@@ -60,7 +66,10 @@ void main() {
     );
 
     final image = tester.widget<Image>(find.byType(Image));
-    final provider = image.image as NetworkImage;
+    final imageProvider = image.image;
+    final provider = imageProvider is ResizeImage
+        ? imageProvider.imageProvider as NetworkImage
+        : imageProvider as NetworkImage;
     expect(
       provider.url,
       'http://10.10.190.46:8001/file/employee.jpg?expires=1789623817&signature=abc123',

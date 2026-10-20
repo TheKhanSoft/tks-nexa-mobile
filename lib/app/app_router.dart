@@ -13,6 +13,7 @@ import 'package:tks_nexa_attendance/features/organization/presentation/organizat
 import 'package:tks_nexa_attendance/features/organization/presentation/phase_one_home_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/startup_screen.dart';
 import 'package:tks_nexa_attendance/features/requests/presentation/requests_screen.dart';
+import 'package:tks_nexa_attendance/features/requests/presentation/team_approvals_screen.dart';
 
 abstract final class AppRoutes {
   static const startup = '/';
@@ -29,6 +30,7 @@ abstract final class AppRoutes {
   static const appSettings = '/account/settings';
   static const changePassword = '/account/change-password';
   static const requests = '/requests';
+  static const teamApprovals = '/requests/approvals';
   static const mobileAttendanceLog = '/attendance/mobile-log';
 }
 
@@ -69,6 +71,10 @@ final appRouterProvider = Provider<GoRouter>(
       GoRoute(
         path: AppRoutes.requests,
         builder: (context, state) => const RequestsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.teamApprovals,
+        builder: (context, state) => const TeamApprovalsScreen(),
       ),
       GoRoute(
         path: AppRoutes.attendancePreparation,

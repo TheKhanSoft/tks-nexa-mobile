@@ -7,6 +7,9 @@
 -dontwarn io.flutter.embedding.engine.deferredcomponents.**
 -dontwarn com.google.android.play.core.**
 
+# App Native Components
+-keep class com.tksnexa.thekhansoft.** { *; }
+
 # TensorFlow Lite, LiteRT & ML Kit Keep Rules
 -keep class com.google.ai.edge.litert.** { *; }
 -dontwarn com.google.ai.edge.litert.**

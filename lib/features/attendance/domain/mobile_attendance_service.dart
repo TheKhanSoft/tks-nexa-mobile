@@ -15,4 +15,6 @@ abstract interface class MobileAttendanceService {
   });
 
   Future<AttendanceMarkResult> markAttendance(AttendanceMarkRequest request);
+
+  Future<AttendanceMarkResult> submitRawPunchPayload(Map<String, dynamic> payload);
 }

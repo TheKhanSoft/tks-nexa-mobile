@@ -61,6 +61,44 @@ class PlatformDeviceSecurityService implements DeviceSecurityService {
     );
   }
 
+  @override
+  Future<DeviceSecurityStatus> checkDeviceSecurity() async {
+    if (kIsWeb) return const DeviceSecurityStatus();
+    try {
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'checkDeviceSecurity',
+      );
+      if (result == null) return const DeviceSecurityStatus();
+      return DeviceSecurityStatus(
+        isRooted: result['isRooted'] == true,
+        isHooked: result['isHooked'] == true,
+        isTampered: result['isTampered'] == true,
+        details: result['details']?.toString(),
+      );
+    } catch (_) {
+      return const DeviceSecurityStatus();
+    }
+  }
+
+  @override
+  Future<WifiNetworkEvidence> getWifiDetails() async {
+    if (kIsWeb) return const WifiNetworkEvidence();
+    try {
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'getWifiDetails',
+      );
+      if (result == null) return const WifiNetworkEvidence();
+      return WifiNetworkEvidence(
+        isWifiConnected: result['isWifiConnected'] == true,
+        bssid: _nonEmpty(result['bssid']?.toString()),
+        ssid: _nonEmpty(result['ssid']?.toString()),
+        gatewayIp: _nonEmpty(result['gatewayIp']?.toString()),
+      );
+    } catch (_) {
+      return const WifiNetworkEvidence();
+    }
+  }
+
   static String? _nonEmpty(String? value) {
     final normalized = value?.trim();
     return normalized == null || normalized.isEmpty ? null : normalized;
