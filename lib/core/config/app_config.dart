@@ -84,7 +84,20 @@ class AppConfig {
     }
     final suffixes = tenantHostSuffixes
         .split(',')
-        .map((value) => value.trim().toLowerCase())
+        .map((value) {
+          var clean = value.trim().toLowerCase();
+          if (clean.contains('://')) {
+            clean = clean.split('://').last;
+          }
+          if (clean.contains('/')) {
+            clean = clean.split('/').first;
+          }
+          if (clean.contains(':')) {
+            clean = clean.split(':').first;
+          }
+          clean = clean.replaceFirst(RegExp(r'^\.+'), '');
+          return clean.trim();
+        })
         .where((value) => value.isNotEmpty)
         .toSet();
     if (suffixes.isEmpty) {
@@ -95,7 +108,8 @@ class AppConfig {
     for (final suffix in suffixes) {
       if (suffix.contains('/') ||
           suffix.contains(':') ||
-          suffix.startsWith('.')) {
+          suffix.startsWith('.') ||
+          suffix.contains(' ')) {
         throw const AppConfigurationException(
           'Tenant API host suffixes must be host names only.',
         );

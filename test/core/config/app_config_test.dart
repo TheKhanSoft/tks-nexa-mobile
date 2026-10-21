@@ -20,6 +20,21 @@ void main() {
       expect(config.allowedTenantHostSuffixes, contains('partner.test'));
     });
 
+    test('normalizes tenant host suffixes with leading dots, scheme, and ports', () {
+      final config = AppConfig.fromValues(
+        environment: 'development',
+        discoveryBaseUrl: 'https://discovery.myattendance.test',
+        tenantHostSuffixes: '.myattendance.test, https://partner.test/, 10.10.190.66:8001',
+        mobileApiSecret: validSecret,
+        allowMockSecurity: true,
+      );
+
+      expect(config.allowedTenantHostSuffixes, contains('myattendance.test'));
+      expect(config.allowedTenantHostSuffixes, contains('partner.test'));
+      expect(config.allowedTenantHostSuffixes, contains('10.10.190.66'));
+      expect(config.allowedTenantHostSuffixes.any((s) => s.startsWith('.')), isFalse);
+    });
+
     test('rejects non-HTTPS discovery configuration', () {
       expect(
         () => AppConfig.fromValues(
