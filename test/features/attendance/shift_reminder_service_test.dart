@@ -60,6 +60,14 @@ class MockLocalNotificationService implements LocalNotificationService {
     });
     return true;
   }
+
+  bool openSettingsCalled = false;
+
+  @override
+  Future<bool> openSettings() async {
+    openSettingsCalled = true;
+    return true;
+  }
 }
 
 void main() {
@@ -175,7 +183,7 @@ void main() {
         ),
       );
 
-      expect(mockNotificationService.scheduledAlarms.length, equals(2));
+      expect(mockNotificationService.scheduledAlarms.length, equals(3));
 
       final startAlarm = mockNotificationService.scheduledAlarms.firstWhere(
         (a) => a['id'] == ShiftReminderService.shiftStartAlarmId,
@@ -188,6 +196,11 @@ void main() {
       );
       expect(endAlarm['title'], contains('Shift Ending: Morning Shift'));
       expect(endAlarm['message'], contains('ends at 4:00 PM'));
+
+      final overdueAlarm = mockNotificationService.scheduledAlarms.firstWhere(
+        (a) => a['id'] == ShiftReminderService.shiftOverdueAlarmId,
+      );
+      expect(overdueAlarm['title'], contains('Attendance Overdue'));
     });
 
     test('cancels shift start alarm when shiftRemindersEnabled is false', () async {
@@ -228,9 +241,15 @@ void main() {
       expect(mockNotificationService.scheduledAlarms.isEmpty, isTrue);
     });
 
-    test('sendTestNotification triggers immediate notification with ID 999', () async {
+    test('sendTestNotification triggers immediate notification with ID 999 and logs notification', () async {
+      String? loggedTitle;
+      String? loggedBody;
       final service = ShiftReminderService(
         notificationService: mockNotificationService,
+        onNotificationLogged: (title, body, category) {
+          loggedTitle = title;
+          loggedBody = body;
+        },
       );
 
       final result = await service.sendTestNotification();
@@ -238,6 +257,18 @@ void main() {
       expect(mockNotificationService.immediateNotifications.length, equals(1));
       expect(mockNotificationService.immediateNotifications.first['id'], equals(ShiftReminderService.testNotificationId));
       expect(mockNotificationService.immediateNotifications.first['title'], equals('TKS Nexa Notification Active'));
+      expect(loggedTitle, equals('TKS Nexa Notification Active'));
+      expect(loggedBody, contains('working properly'));
+    });
+
+    test('openNotificationSettings delegates to localNotificationService', () async {
+      final service = ShiftReminderService(
+        notificationService: mockNotificationService,
+      );
+
+      final ok = await service.openNotificationSettings();
+      expect(ok, isTrue);
+      expect(mockNotificationService.openSettingsCalled, isTrue);
     });
   });
 }

@@ -357,8 +357,8 @@ class NotificationPreferencesScreen extends ConsumerWidget {
     final brand = theme.extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
 
     return _PreferenceScreen(
-      title: 'Notifications',
-      subtitle: 'Configure automated shift alerts and security notifications.',
+      title: 'Notification Settings',
+      subtitle: 'Configure automated shift alerts, overdue warnings, and security notifications.',
       header: Card(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
@@ -438,6 +438,16 @@ class NotificationPreferencesScreen extends ConsumerWidget {
         ],
         const Divider(height: 1, indent: 56),
         SwitchListTile(
+          value: notifPrefs.missedAttendanceRemindersEnabled,
+          onChanged: (val) => ref
+              .read(shiftNotificationPreferencesProvider.notifier)
+              .setMissedAttendanceRemindersEnabled(val),
+          secondary: const Icon(Icons.warning_amber_rounded),
+          title: const Text('Missed shift / overdue alert'),
+          subtitle: const Text('Alerts you immediately if shift time has passed today and you haven\'t clocked in.'),
+        ),
+        const Divider(height: 1, indent: 56),
+        SwitchListTile(
           value: notifPrefs.shiftEndRemindersEnabled,
           onChanged: (val) => ref
               .read(shiftNotificationPreferencesProvider.notifier)
@@ -488,6 +498,51 @@ class NotificationPreferencesScreen extends ConsumerWidget {
             }
           },
         ),
+        const Divider(height: 1),
+        ListTile(
+          leading: const Icon(Icons.settings_suggest_outlined),
+          title: const Text('Device notification settings'),
+          subtitle: const Text('Manage system notification channels, lock-screen alerts, and sound.'),
+          trailing: const Icon(Icons.open_in_new_rounded),
+          onTap: () async {
+            final opened = await ref.read(shiftReminderServiceProvider).openNotificationSettings();
+            if (!opened && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Could not open system settings automatically. Please open Settings > Apps > TKS Nexa.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class AppearanceSettingsScreen extends ConsumerWidget {
+  const AppearanceSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appearance =
+        ref.watch(appAppearanceProvider).value ?? const AppAppearance();
+
+    return _PreferenceScreen(
+      title: 'Appearance',
+      subtitle: 'Customize display mode, palette colors, and page background.',
+      children: [
+        _AppearancePanel(
+          appearance: appearance,
+          onBrightnessSelected: ref
+              .read(appAppearanceProvider.notifier)
+              .setBrightnessPreference,
+          onThemeSelected: ref.read(appAppearanceProvider.notifier).setColorTheme,
+          onBackgroundSelected: ref
+              .read(appAppearanceProvider.notifier)
+              .setBackgroundStyle,
+        ),
       ],
     );
   }
@@ -498,25 +553,37 @@ class AppSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final appearance =
-        ref.watch(appAppearanceProvider).value ?? const AppAppearance();
     final preferences =
         ref.watch(appPreferencesProvider).value ?? const AppPreferences();
 
     return _PreferenceScreen(
-      title: 'App settings',
-      subtitle: 'Personalize your attendance experience on this device.',
-      header: _AppearancePanel(
-        appearance: appearance,
-        onBrightnessSelected: ref
-            .read(appAppearanceProvider.notifier)
-            .setBrightnessPreference,
-        onThemeSelected: ref.read(appAppearanceProvider.notifier).setColorTheme,
-        onBackgroundSelected: ref
-            .read(appAppearanceProvider.notifier)
-            .setBackgroundStyle,
-      ),
+      title: 'Settings',
+      subtitle: 'Manage app preferences, notifications, security, and appearance.',
       children: [
+        const _SettingsSectionHeader(title: 'PREFERENCES'),
+        _SettingsNavTile(
+          icon: Icons.notifications_active_outlined,
+          iconColor: const Color(0xFF2563EB),
+          title: 'Notifications & Alerts',
+          subtitle: 'Shift reminders, overdue alerts & delivery settings',
+          onTap: () => context.push(AppRoutes.notificationPreferences),
+        ),
+        _SettingsNavTile(
+          icon: Icons.palette_outlined,
+          iconColor: const Color(0xFF8B5CF6),
+          title: 'Appearance & Themes',
+          subtitle: 'Theme palette, dark mode & page backgrounds',
+          onTap: () => context.push(AppRoutes.appearanceSettings),
+        ),
+        _SettingsNavTile(
+          icon: Icons.shield_outlined,
+          iconColor: const Color(0xFF10B981),
+          title: 'Security & Hardware Attestation',
+          subtitle: 'Device binding, hardware keystore & biometric trust',
+          onTap: () => context.push(AppRoutes.securityDevices),
+        ),
+        const SizedBox(height: 16),
+        const _SettingsSectionHeader(title: 'GENERAL'),
         SwitchListTile(
           value: preferences.use24HourTime,
           onChanged: (value) => ref
@@ -552,7 +619,93 @@ class AppSettingsScreen extends ConsumerWidget {
             'Return to your most recently used section.',
           ),
         ),
+        const SizedBox(height: 16),
+        const _SettingsSectionHeader(title: 'ACCOUNT & ACCESS'),
+        _SettingsNavTile(
+          icon: Icons.person_outline_rounded,
+          iconColor: const Color(0xFF0D9488),
+          title: 'Personal Information',
+          subtitle: 'View employee ID, designation & department',
+          onTap: () => context.push(AppRoutes.personalInformation),
+        ),
+        _SettingsNavTile(
+          icon: Icons.lock_outline_rounded,
+          iconColor: const Color(0xFFF59E0B),
+          title: 'Change Password',
+          subtitle: 'Update your account login credentials',
+          onTap: () => context.push(AppRoutes.changePassword),
+        ),
+        const SizedBox(height: 16),
+        const _SettingsSectionHeader(title: 'DEVICE & SYSTEM'),
+        ListTile(
+          leading: const Icon(Icons.settings_suggest_outlined),
+          title: const Text('System Notification Settings'),
+          subtitle: const Text('Open device app settings to check permissions'),
+          trailing: const Icon(Icons.open_in_new_rounded),
+          onTap: () => ref.read(shiftReminderServiceProvider).openNotificationSettings(),
+        ),
       ],
+    );
+  }
+}
+
+class _SettingsSectionHeader extends StatelessWidget {
+  const _SettingsSectionHeader({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.0,
+          color: theme.colorScheme.primary,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsNavTile extends StatelessWidget {
+  const _SettingsNavTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListTile(
+      leading: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: iconColor, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
     );
   }
 }

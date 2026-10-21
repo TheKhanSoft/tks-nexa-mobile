@@ -39,6 +39,9 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // Ensure high-importance notification channel is registered on startup
+        ShiftReminderReceiver.createNotificationChannel(applicationContext)
+
         // Device Security & Hardware Attestation Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
@@ -216,9 +219,30 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
 
+                    "openNotificationSettings" -> {
+                        try {
+                            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                                }
+                            } else {
+                                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = android.net.Uri.fromParts("package", packageName, null)
+                                }
+                            }
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("SETTINGS_ERROR", e.message, null)
+                        }
+                    }
+
                     "cancelAllAlarms" -> {
                         cancelShiftAlarm(1001)
                         cancelShiftAlarm(1002)
+                        cancelShiftAlarm(1003)
+                        cancelShiftAlarm(1004)
                         result.success(true)
                     }
 
@@ -245,12 +269,21 @@ class MainActivity : FlutterActivity() {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
         val pendingIntent = PendingIntent.getActivity(this, id, launchIntent, flags)
 
+        val iconRes = if (resources.getIdentifier("ic_notification", "drawable", packageName) != 0) {
+            R.drawable.ic_notification
+        } else {
+            applicationInfo.icon
+        }
+
         val notification = NotificationCompat.Builder(this, ShiftReminderReceiver.CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(iconRes)
+            .setColor(0xFF2563EB.toInt())
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

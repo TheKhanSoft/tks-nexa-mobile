@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tks_nexa_attendance/core/storage/secure_storage_service.dart';
 import 'package:tks_nexa_attendance/features/account/application/account_providers.dart';
 import 'package:tks_nexa_attendance/features/account/domain/employee_profile.dart';
+import 'package:tks_nexa_attendance/features/attendance/application/attendance_history_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/local_notification_service.dart';
+import 'package:tks_nexa_attendance/features/notifications/application/notification_inbox_service.dart';
+import 'package:tks_nexa_attendance/features/notifications/domain/app_notification_item.dart';
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 
 class ShiftNotificationPreferences {
   const ShiftNotificationPreferences({
     this.shiftRemindersEnabled = true,
     this.shiftEndRemindersEnabled = true,
+    this.missedAttendanceRemindersEnabled = true,
     this.leadTimeMinutes = 15,
     this.scheduleChangesEnabled = true,
     this.securityAlertsEnabled = true,
@@ -17,6 +21,7 @@ class ShiftNotificationPreferences {
 
   final bool shiftRemindersEnabled;
   final bool shiftEndRemindersEnabled;
+  final bool missedAttendanceRemindersEnabled;
   final int leadTimeMinutes;
   final bool scheduleChangesEnabled;
   final bool securityAlertsEnabled;
@@ -24,6 +29,7 @@ class ShiftNotificationPreferences {
   ShiftNotificationPreferences copyWith({
     bool? shiftRemindersEnabled,
     bool? shiftEndRemindersEnabled,
+    bool? missedAttendanceRemindersEnabled,
     int? leadTimeMinutes,
     bool? scheduleChangesEnabled,
     bool? securityAlertsEnabled,
@@ -31,6 +37,7 @@ class ShiftNotificationPreferences {
     return ShiftNotificationPreferences(
       shiftRemindersEnabled: shiftRemindersEnabled ?? this.shiftRemindersEnabled,
       shiftEndRemindersEnabled: shiftEndRemindersEnabled ?? this.shiftEndRemindersEnabled,
+      missedAttendanceRemindersEnabled: missedAttendanceRemindersEnabled ?? this.missedAttendanceRemindersEnabled,
       leadTimeMinutes: leadTimeMinutes ?? this.leadTimeMinutes,
       scheduleChangesEnabled: scheduleChangesEnabled ?? this.scheduleChangesEnabled,
       securityAlertsEnabled: securityAlertsEnabled ?? this.securityAlertsEnabled,
@@ -44,6 +51,7 @@ class ShiftNotificationPreferences {
           runtimeType == other.runtimeType &&
           shiftRemindersEnabled == other.shiftRemindersEnabled &&
           shiftEndRemindersEnabled == other.shiftEndRemindersEnabled &&
+          missedAttendanceRemindersEnabled == other.missedAttendanceRemindersEnabled &&
           leadTimeMinutes == other.leadTimeMinutes &&
           scheduleChangesEnabled == other.scheduleChangesEnabled &&
           securityAlertsEnabled == other.securityAlertsEnabled;
@@ -52,6 +60,7 @@ class ShiftNotificationPreferences {
   int get hashCode => Object.hash(
         shiftRemindersEnabled,
         shiftEndRemindersEnabled,
+        missedAttendanceRemindersEnabled,
         leadTimeMinutes,
         scheduleChangesEnabled,
         securityAlertsEnabled,
@@ -73,6 +82,7 @@ class ShiftNotificationPreferencesNotifier extends AsyncNotifier<ShiftNotificati
     final storage = ref.watch(secureStorageServiceProvider);
     final startRemind = await storage.read('${_prefix}shift_start');
     final endRemind = await storage.read('${_prefix}shift_end');
+    final missedRemind = await storage.read('${_prefix}missed_reminders');
     final leadMinutes = await storage.read('${_prefix}lead_minutes');
     final scheduleChanges = await storage.read('${_prefix}schedule_changes');
     final securityAlerts = await storage.read('${_prefix}security_alerts');
@@ -80,6 +90,7 @@ class ShiftNotificationPreferencesNotifier extends AsyncNotifier<ShiftNotificati
     return ShiftNotificationPreferences(
       shiftRemindersEnabled: startRemind != 'false',
       shiftEndRemindersEnabled: endRemind != 'false',
+      missedAttendanceRemindersEnabled: missedRemind != 'false',
       leadTimeMinutes: int.tryParse(leadMinutes ?? '') ?? 15,
       scheduleChangesEnabled: scheduleChanges != 'false',
       securityAlertsEnabled: securityAlerts != 'false',
@@ -97,6 +108,13 @@ class ShiftNotificationPreferencesNotifier extends AsyncNotifier<ShiftNotificati
     final current = state.value ?? const ShiftNotificationPreferences();
     state = AsyncData(current.copyWith(shiftEndRemindersEnabled: value));
     await _storage.write('${_prefix}shift_end', value.toString());
+    await ref.read(shiftReminderServiceProvider).syncShiftReminders();
+  }
+
+  Future<void> setMissedAttendanceRemindersEnabled(bool value) async {
+    final current = state.value ?? const ShiftNotificationPreferences();
+    state = AsyncData(current.copyWith(missedAttendanceRemindersEnabled: value));
+    await _storage.write('${_prefix}missed_reminders', value.toString());
     await ref.read(shiftReminderServiceProvider).syncShiftReminders();
   }
 
@@ -125,16 +143,24 @@ class ShiftReminderService {
     required LocalNotificationService notificationService,
     EmployeeProfile? Function()? getProfile,
     ShiftNotificationPreferences Function()? getPreferences,
+    bool Function()? getHasMarkedToday,
+    void Function(String title, String body, NotificationCategory category)? onNotificationLogged,
   })  : _notificationService = notificationService,
         _getProfile = getProfile,
-        _getPreferences = getPreferences;
+        _getPreferences = getPreferences,
+        _getHasMarkedToday = getHasMarkedToday,
+        _onNotificationLogged = onNotificationLogged;
 
   final LocalNotificationService _notificationService;
   final EmployeeProfile? Function()? _getProfile;
   final ShiftNotificationPreferences Function()? _getPreferences;
+  final bool Function()? _getHasMarkedToday;
+  final void Function(String title, String body, NotificationCategory category)? _onNotificationLogged;
 
   static const int shiftStartAlarmId = 1001;
   static const int shiftEndAlarmId = 1002;
+  static const int shiftOverdueAlarmId = 1003;
+  static const int shiftOverdueEndAlarmId = 1004;
   static const int testNotificationId = 999;
 
   /// Synchronizes scheduled alarms with the current assigned shift and user preferences.
@@ -147,34 +173,98 @@ class ShiftReminderService {
     final preferences = overridePreferences ??
         _getPreferences?.call() ??
         const ShiftNotificationPreferences();
+    final hasMarkedToday = _getHasMarkedToday?.call() ?? false;
 
     if (shift == null) {
       await _notificationService.cancelAlarm(shiftStartAlarmId);
       await _notificationService.cancelAlarm(shiftEndAlarmId);
+      await _notificationService.cancelAlarm(shiftOverdueAlarmId);
+      await _notificationService.cancelAlarm(shiftOverdueEndAlarmId);
       return;
     }
 
     final now = DateTime.now();
+    final todayStart = getTodayTime(shift.startTime, now);
+    final todayEnd = getTodayTime(shift.endTime, now);
 
-    // 1. Shift Start Reminder
-    if (preferences.shiftRemindersEnabled) {
-      final startTime = computeNextAlarmTime(
-        timeStr: shift.startTime,
-        now: now,
-        offsetMinutes: preferences.leadTimeMinutes,
-      );
-      if (startTime != null) {
-        final formattedShiftTime = formatTimeString(shift.startTime);
-        await _notificationService.scheduleAlarm(
-          id: shiftStartAlarmId,
-          scheduledTime: startTime,
-          title: 'Upcoming Shift: ${shift.name}',
-          message:
-              'Your shift starts at $formattedShiftTime (${preferences.leadTimeMinutes}m reminder). Don\'t forget to clock in!',
-        );
-      }
-    } else {
+    // 1. Shift Start & Overdue Reminders
+    if (hasMarkedToday) {
+      // Employee already marked attendance today:
+      // Cancel early reminder and overdue reminder so they are not disturbed.
       await _notificationService.cancelAlarm(shiftStartAlarmId);
+      await _notificationService.cancelAlarm(shiftOverdueAlarmId);
+    } else {
+      // Employee has NOT marked attendance yet:
+      if (preferences.shiftRemindersEnabled) {
+        final startTime = computeNextAlarmTime(
+          timeStr: shift.startTime,
+          now: now,
+          offsetMinutes: preferences.leadTimeMinutes,
+        );
+        if (startTime != null) {
+          final formattedShiftTime = formatTimeString(shift.startTime);
+          await _notificationService.scheduleAlarm(
+            id: shiftStartAlarmId,
+            scheduledTime: startTime,
+            title: 'Upcoming Shift: ${shift.name}',
+            message:
+                'Your shift starts at $formattedShiftTime (${preferences.leadTimeMinutes}m reminder). Don\'t forget to clock in!',
+          );
+        }
+      } else {
+        await _notificationService.cancelAlarm(shiftStartAlarmId);
+      }
+
+      // Check for Overdue Attendance Reminder
+      if (preferences.missedAttendanceRemindersEnabled && todayStart != null) {
+        final graceMinutes = shift.gracePeriodMinutes > 0 ? shift.gracePeriodMinutes : 15;
+        final overdueTriggerTime = todayStart.add(Duration(minutes: graceMinutes));
+
+        if (now.isAfter(overdueTriggerTime)) {
+          // Time is ALREADY PASSED today and user hasn't marked attendance yet!
+          final cutoffTime = todayEnd ?? DateTime(now.year, now.month, now.day, 23, 59);
+          if (now.isBefore(cutoffTime)) {
+            final formattedShiftTime = formatTimeString(shift.startTime);
+            const overdueTitle = 'Attendance Overdue';
+            final overdueMsg =
+                'Your shift (${shift.name}) started at $formattedShiftTime. You haven\'t clocked in yet — please mark your attendance now.';
+
+            await _notificationService.showNotification(
+              id: shiftOverdueAlarmId,
+              title: overdueTitle,
+              message: overdueMsg,
+            );
+            _onNotificationLogged?.call(
+              overdueTitle,
+              overdueMsg,
+              NotificationCategory.overdueAttendance,
+            );
+          }
+
+          // Schedule tomorrow's overdue alarm
+          final tomorrowOverdue = overdueTriggerTime.add(const Duration(days: 1));
+          final formattedShiftTime = formatTimeString(shift.startTime);
+          await _notificationService.scheduleAlarm(
+            id: shiftOverdueAlarmId,
+            scheduledTime: tomorrowOverdue,
+            title: 'Attendance Overdue: ${shift.name}',
+            message:
+                'Your shift started at $formattedShiftTime. Please mark your attendance now to avoid being marked late or absent.',
+          );
+        } else {
+          // Overdue time is still in the future TODAY: schedule it for today!
+          final formattedShiftTime = formatTimeString(shift.startTime);
+          await _notificationService.scheduleAlarm(
+            id: shiftOverdueAlarmId,
+            scheduledTime: overdueTriggerTime,
+            title: 'Attendance Overdue: ${shift.name}',
+            message:
+                'Your shift started at $formattedShiftTime. Please mark your attendance now to avoid being marked late or absent.',
+          );
+        }
+      } else {
+        await _notificationService.cancelAlarm(shiftOverdueAlarmId);
+      }
     }
 
     // 2. Shift End Reminder
@@ -207,11 +297,35 @@ class ShiftReminderService {
       if (!granted) return false;
     }
 
-    return _notificationService.showNotification(
+    const testTitle = 'TKS Nexa Notification Active';
+    const testMsg =
+        'Shift reminders and attendance alerts are configured and working properly on this device.';
+
+    final ok = await _notificationService.showNotification(
       id: testNotificationId,
-      title: 'TKS Nexa Notification Active',
-      message: 'Shift reminders and security alerts are configured and working properly on this device.',
+      title: testTitle,
+      message: testMsg,
     );
+
+    if (ok) {
+      _onNotificationLogged?.call(
+        testTitle,
+        testMsg,
+        NotificationCategory.system,
+      );
+    }
+
+    return ok;
+  }
+
+  Future<bool> openNotificationSettings() {
+    return _notificationService.openSettings();
+  }
+
+  static DateTime? getTodayTime(String timeStr, DateTime now) {
+    final tod = parseTimeString(timeStr);
+    if (tod == null) return null;
+    return DateTime(now.year, now.month, now.day, tod.hour, tod.minute);
   }
 
   static DateTime? computeNextAlarmTime({
@@ -274,5 +388,24 @@ final shiftReminderServiceProvider = Provider<ShiftReminderService>(
     getPreferences: () =>
         ref.read(shiftNotificationPreferencesProvider).value ??
         const ShiftNotificationPreferences(),
+    getHasMarkedToday: () {
+      final history = ref.read(attendanceHistoryResponseProvider).value;
+      if (history == null) return false;
+      final now = DateTime.now();
+      final todayRec = history.records.where((r) =>
+          r.date.year == now.year &&
+          r.date.month == now.month &&
+          r.date.day == now.day).firstOrNull;
+      return todayRec != null &&
+          todayRec.firstInFormatted != null &&
+          todayRec.firstInFormatted != '--:--';
+    },
+    onNotificationLogged: (title, body, category) {
+      ref.read(notificationInboxProvider.notifier).addNotification(
+            title: title,
+            body: body,
+            category: category,
+          );
+    },
   ),
 );

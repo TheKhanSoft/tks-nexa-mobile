@@ -6,6 +6,7 @@ import 'package:tks_nexa_attendance/features/attendance/domain/camera_corroborat
 import 'package:tks_nexa_attendance/features/attendance/presentation/attendance_preparation_screen.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/camera_verification_screen.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/mobile_attendance_log_screen.dart';
+import 'package:tks_nexa_attendance/features/notifications/presentation/notifications_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/domain/organization.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/organization_confirmation_screen.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/organization_qr_screen.dart';
@@ -25,7 +26,9 @@ abstract final class AppRoutes {
   static const cameraVerification = '/attendance/camera-verification';
   static const attendancePreparation = '/attendance/prepare';
   static const personalInformation = '/account/personal-information';
+  static const notifications = '/notifications';
   static const notificationPreferences = '/account/notifications';
+  static const appearanceSettings = '/account/settings/appearance';
   static const securityDevices = '/account/security-devices';
   static const appSettings = '/account/settings';
   static const changePassword = '/account/change-password';
@@ -85,8 +88,16 @@ final appRouterProvider = Provider<GoRouter>(
         builder: (context, state) => const PersonalInformationScreen(),
       ),
       GoRoute(
+        path: AppRoutes.notifications,
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.notificationPreferences,
         builder: (context, state) => const NotificationPreferencesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.appearanceSettings,
+        builder: (context, state) => const AppearanceSettingsScreen(),
       ),
       GoRoute(
         path: AppRoutes.securityDevices,

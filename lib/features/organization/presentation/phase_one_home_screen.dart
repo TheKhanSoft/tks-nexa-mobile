@@ -21,6 +21,7 @@ import 'package:tks_nexa_attendance/features/attendance/presentation/face_captur
 import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 import 'package:tks_nexa_attendance/features/organization/domain/organization.dart';
 import 'package:tks_nexa_attendance/features/organization/presentation/failure_message.dart';
+import 'package:tks_nexa_attendance/features/notifications/application/notification_inbox_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/shift_reminder_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/offline_punch_sync_service.dart';
 
@@ -306,6 +307,8 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
         final employeePhotoUrl =
             profileState.value?.photoUrl ?? authSession?.photoUrl;
 
+        final unreadNotifs = ref.watch(unreadNotificationsCountProvider);
+
         return Scaffold(
           drawer: _EmployeeDrawer(
             employeeName: employeeName,
@@ -343,10 +346,11 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
               IconButton(
                 tooltip: 'Notifications',
                 onPressed: () =>
-                    context.push(AppRoutes.notificationPreferences),
-                icon: const Badge(
-                  isLabelVisible: false,
-                  child: Icon(Icons.notifications_none_rounded),
+                    context.push(AppRoutes.notifications),
+                icon: Badge(
+                  isLabelVisible: unreadNotifs > 0,
+                  label: Text(unreadNotifs > 99 ? '99+' : '$unreadNotifs'),
+                  child: const Icon(Icons.notifications_none_rounded),
                 ),
               ),
               const SizedBox(width: 8),
@@ -977,7 +981,9 @@ class _TodaysAttendanceCard extends ConsumerWidget {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    'MobileFaceNet · ${todayRec.trustScore ?? 100}% Trust',
+                                    (todayRec.trustScore != null && todayRec.trustScore! > 0)
+                                        ? 'Face Verified · ${todayRec.trustScore}%'
+                                        : 'Biometric Verified',
                                     style: const TextStyle(
                                       color: Color(0xFF6EE7B7),
                                       fontSize: 10,
@@ -1342,7 +1348,7 @@ class _RecentAttendanceSection extends ConsumerWidget {
             ? Icons.access_time_filled_rounded
             : (isPres ? Icons.check_circle_rounded : Icons.verified_user_rounded),
         subtitle:
-            '${todayRec.shiftName.isNotEmpty ? todayRec.shiftName : shiftName} · ${todayRec.trustScore ?? 100}% Trust',
+            '${todayRec.shiftName.isNotEmpty ? todayRec.shiftName : shiftName}${(todayRec.trustScore != null && todayRec.trustScore! > 0) ? ' · ${todayRec.trustScore}% Match' : ' · Verified'}',
         timeRange:
             '${todayRec.firstInFormatted ?? '--:--'} - ${(todayRec.lastOutFormatted != null && todayRec.lastOutFormatted != todayRec.firstInFormatted) ? todayRec.lastOutFormatted! : '--:--'}',
         capturedPhotoUrl: todayRec.photoUrl,
@@ -1416,7 +1422,7 @@ class _RecentAttendanceSection extends ConsumerWidget {
         color: color,
         icon: icon,
         subtitle:
-            '${rec.shiftName.isNotEmpty ? rec.shiftName : shiftName} · ${rec.trustScore ?? 100}% Trust',
+            '${rec.shiftName.isNotEmpty ? rec.shiftName : shiftName}${(rec.trustScore != null && rec.trustScore! > 0) ? ' · ${rec.trustScore}% Match' : ' · Verified'}',
         timeRange: timeRange,
         capturedPhotoUrl: rec.photoUrl,
         trustScore: rec.trustScore,
@@ -1966,7 +1972,9 @@ void _showPunchDetailModal({
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'On-Device Neural Verification · ${item.trustScore ?? 100}% Confidence',
+                                        (item.trustScore != null && item.trustScore! > 0)
+                                            ? 'Biometric Verification · ${item.trustScore}% Match'
+                                            : 'Biometric Verification · Verified',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
@@ -2006,15 +2014,17 @@ void _showPunchDetailModal({
                           const Divider(height: 18),
                           _buildTelemetryRow(
                             icon: Icons.shield_rounded,
-                            label: 'Biometric Trust Score',
-                            value: '${item.trustScore ?? 100}% (Authoritative Match)',
+                            label: 'Biometric Status',
+                            value: (item.trustScore != null && item.trustScore! > 0)
+                                ? '${item.trustScore}% Match (Verified)'
+                                : 'Biometrically Verified',
                             valueColor: const Color(0xFF10B981),
                           ),
                           const Divider(height: 18),
                           _buildTelemetryRow(
-                            icon: Icons.memory_rounded,
-                            label: 'Verification Model',
-                            value: 'MobileFaceNet Neural Engine',
+                            icon: Icons.fingerprint_rounded,
+                            label: 'Verification Method',
+                            value: 'On-Device Face Biometrics',
                           ),
                           const Divider(height: 18),
                           _buildTelemetryRow(
@@ -2846,7 +2856,7 @@ class _ProfileSectionLabel extends StatelessWidget {
   }
 }
 
-class _EmployeeDrawer extends StatelessWidget {
+class _EmployeeDrawer extends ConsumerWidget {
   const _EmployeeDrawer({
     required this.employeeName,
     required this.photoUrl,
@@ -2868,7 +2878,8 @@ class _EmployeeDrawer extends StatelessWidget {
   final VoidCallback onLogout;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadNotifs = ref.watch(unreadNotificationsCountProvider);
     final brand =
         Theme.of(context).extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
     void openRoute(String route) {
@@ -2972,7 +2983,34 @@ class _EmployeeDrawer extends StatelessWidget {
                     _DrawerMenuTile(
                       icon: Icons.notifications_rounded,
                       label: 'Notifications',
-                      onTap: () => openRoute(AppRoutes.notificationPreferences),
+                      trailing: unreadNotifs > 0
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    unreadNotifs > 99 ? '99+' : '$unreadNotifs',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Colors.white.withValues(alpha: .55),
+                                ),
+                              ],
+                            )
+                          : null,
+                      onTap: () => openRoute(AppRoutes.notifications),
                     ),
                     _DrawerMenuTile(
                       icon: Icons.security_rounded,
@@ -3249,12 +3287,14 @@ class _DrawerMenuTile extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.foregroundColor = Colors.white,
+    this.trailing,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final Color foregroundColor;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -3268,7 +3308,7 @@ class _DrawerMenuTile extends StatelessWidget {
           label,
           style: TextStyle(color: foregroundColor, fontWeight: FontWeight.w700),
         ),
-        trailing: Icon(
+        trailing: trailing ?? Icon(
           Icons.chevron_right_rounded,
           color: foregroundColor.withValues(alpha: .55),
         ),

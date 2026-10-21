@@ -58,12 +58,21 @@ class ShiftReminderReceiver : BroadcastReceiver() {
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
             val pendingIntent = PendingIntent.getActivity(context, id, launchIntent, flags)
 
+            val iconRes = if (context.resources.getIdentifier("ic_notification", "drawable", context.packageName) != 0) {
+                R.drawable.ic_notification
+            } else {
+                context.applicationInfo.icon
+            }
+
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(iconRes)
+                .setColor(0xFF2563EB.toInt())
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setAutoCancel(true)
                 .setContentIntent(pendingIntent)

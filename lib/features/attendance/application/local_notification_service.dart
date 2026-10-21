@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 abstract interface class LocalNotificationService {
   Future<bool> hasPermission();
   Future<bool> requestPermission();
+  Future<bool> openSettings();
   Future<bool> showNotification({
     required int id,
     required String title,
@@ -42,6 +43,17 @@ class PlatformLocalNotificationService implements LocalNotificationService {
     if (kIsWeb) return false;
     try {
       final res = await _channel.invokeMethod<bool>('requestNotificationPermission');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> openSettings() async {
+    if (kIsWeb) return false;
+    try {
+      final res = await _channel.invokeMethod<bool>('openNotificationSettings');
       return res ?? false;
     } catch (_) {
       return false;
