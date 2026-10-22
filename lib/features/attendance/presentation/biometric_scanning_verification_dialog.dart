@@ -315,7 +315,9 @@ class _BiometricScanningVerificationDialogState
             child: _buildTelemetryTag(
               _state == _VerificationState.verifying
                   ? 'MATCHING…'
-                  : (_state == _VerificationState.success ? 'VERIFIED' : 'FAILED'),
+                  : (_state == _VerificationState.success
+                      ? (_result?.isOffline == true ? 'SECURED' : 'VERIFIED')
+                      : 'FAILED'),
               accentColor,
             ),
           ),
@@ -447,10 +449,12 @@ class _BiometricScanningVerificationDialogState
 
   Widget _buildSuccessSection(Color accentColor) {
     final result = _result;
+    final isOffline = result?.isOffline == true;
+
     return Column(
       children: [
         Text(
-          'Identity Verified!',
+          isOffline ? 'Biometrics Secured!' : 'Identity Verified!',
           style: TextStyle(
             color: accentColor,
             fontSize: 20,
@@ -459,7 +463,9 @@ class _BiometricScanningVerificationDialogState
         ),
         const SizedBox(height: 6),
         Text(
-          result?.message ?? 'Attendance record logged successfully.',
+          isOffline
+              ? 'Punch secured offline. Facial features and location recorded and will be verified once connected.'
+              : (result?.message ?? 'Attendance record logged successfully.'),
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: Colors.white70,
@@ -492,36 +498,54 @@ class _BiometricScanningVerificationDialogState
                   ),
                 ),
               ),
-            Builder(
-              builder: (context) {
-                final simScore = result?.similarityScore;
-                final displayScore = (simScore != null && simScore > 0)
-                    ? simScore
-                    : (result?.trustScore != null ? result!.trustScore!.toDouble() : null);
-                if (displayScore != null) {
-                  final formatted = displayScore % 1 == 0
-                      ? displayScore.toInt().toString()
-                      : displayScore.toStringAsFixed(1);
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: Text(
-                      'Similarity: $formatted%',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+            if (isOffline)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                ),
+                child: const Text(
+                  'Pending Online Verification',
+                  style: TextStyle(
+                    color: Color(0xFFF59E0B),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              )
+            else
+              Builder(
+                builder: (context) {
+                  final simScore = result?.similarityScore;
+                  final displayScore = (simScore != null && simScore > 0)
+                      ? simScore
+                      : null;
+                  if (displayScore != null) {
+                    final formatted = displayScore % 1 == 0
+                        ? displayScore.toInt().toString()
+                        : displayScore.toStringAsFixed(1);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white24),
                       ),
-                    ),
-                  );
-                }
-                return const SizedBox.shrink();
-              },
-            ),
+                      child: Text(
+                        'Similarity: $formatted%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
           ],
         ),
         const SizedBox(height: 20),

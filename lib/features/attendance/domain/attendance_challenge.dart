@@ -23,11 +23,13 @@ class AttendanceChallengePolicy {
     required this.polygonGeofenceEnabled,
     required this.requireAppIntegrity,
     required this.cameraVerificationEnabled,
+    this.offlineAttendanceEnabled = false,
   });
 
   final bool polygonGeofenceEnabled;
   final bool requireAppIntegrity;
   final bool cameraVerificationEnabled;
+  final bool offlineAttendanceEnabled;
 }
 
 class AttendanceChallengeLocation {

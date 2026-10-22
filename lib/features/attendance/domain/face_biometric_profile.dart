@@ -31,23 +31,25 @@ class FaceBiometricProfile {
 
 class LocalFaceVerification {
   const LocalFaceVerification({
-    required this.similarity,
+    this.similarity,
     required this.threshold,
     required this.livenessPassed,
     required this.challenge,
     required this.modelVersion,
     this.liveVector,
     this.mirroredVector,
+    this.isOfflinePendingMatch = false,
   });
 
-  final double similarity;
+  final double? similarity;
   final double threshold;
   final bool livenessPassed;
   final String challenge;
   final String modelVersion;
   final List<double>? liveVector;
   final List<double>? mirroredVector;
+  final bool isOfflinePendingMatch;
 
-  bool get matched => similarity >= threshold;
+  bool get matched => isOfflinePendingMatch || ((similarity ?? 0.0) >= threshold);
   bool get accepted => matched && livenessPassed;
 }

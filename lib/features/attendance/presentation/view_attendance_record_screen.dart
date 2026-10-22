@@ -29,6 +29,7 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
     this.matchPercentage,
     this.deviceLabel,
     this.isLate = false,
+    this.isOffline = false,
   });
 
   final DateTime timestamp;
@@ -42,6 +43,7 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
   final double? matchPercentage;
   final String? deviceLabel;
   final bool isLate;
+  final bool isOffline;
 
   /// Factory helper from a PunchTouchpoint
   static ViewAttendanceRecordScreen fromTouchpoint({
@@ -74,6 +76,8 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
       matchPercentage: touchpoint.matchPercentage ?? touchpoint.similarityScore,
       deviceLabel: touchpoint.deviceLabel,
       isLate: touchpoint.statusTag.toLowerCase().contains('late'),
+      isOffline: touchpoint.statusTag.toLowerCase().contains('offline') ||
+          touchpoint.statusTag.toLowerCase().contains('pending'),
     );
   }
 
@@ -96,6 +100,10 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
             fallbackSeed: record.id,
           );
 
+    final bool isOfflineRecord =
+        record.status.toLowerCase().contains('offline') ||
+        record.status.toLowerCase().contains('pending');
+
     return ViewAttendanceRecordScreen(
       timestamp: ts,
       verificationCode: code,
@@ -105,9 +113,10 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
       photoPath: localPhotoPath,
       snapshotUrl: record.photoUrl,
       statusLabel: isCheckOut ? 'Shift Out' : (record.isLate ? 'Late Arrival' : 'Shift In'),
-      matchPercentage: record.trustScore?.toDouble() ?? 92.0,
+      matchPercentage: isOfflineRecord ? null : (record.trustScore?.toDouble() ?? 92.0),
       deviceLabel: record.deviceModel ?? record.deviceName ?? 'Authorized Device',
       isLate: record.isLate,
+      isOffline: isOfflineRecord,
     );
   }
 
@@ -127,9 +136,10 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
       photoPath: item.photoPath,
       snapshotUrl: item.photoUrl,
       statusLabel: item.status,
-      matchPercentage: item.matchScore.toDouble(),
+      matchPercentage: item.isOffline ? null : item.matchScore.toDouble(),
       deviceLabel: item.deviceModel,
       isLate: item.typeLabel.toLowerCase().contains('late'),
+      isOffline: item.isOffline,
     );
   }
 
@@ -553,19 +563,39 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981).withValues(alpha: 0.16),
+                color: widget.isOffline
+                    ? const Color(0xFFF59E0B).withValues(alpha: 0.16)
+                    : const Color(0xFF10B981).withValues(alpha: 0.16),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
+                border: Border.all(
+                  color: widget.isOffline
+                      ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
+                      : const Color(0xFF10B981).withValues(alpha: 0.35),
+                ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF10B981)),
-                  SizedBox(width: 5),
+                  Icon(
+                    widget.isOffline
+                        ? Icons.cloud_upload_outlined
+                        : Icons.check_circle_rounded,
+                    size: 14,
+                    color: widget.isOffline
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF10B981),
+                  ),
+                  const SizedBox(width: 5),
                   Text(
-                    'Matched',
+                    widget.isOffline
+                        ? 'Pending Verification'
+                        : (widget.matchPercentage != null && widget.matchPercentage! > 0
+                            ? '${widget.matchPercentage!.toStringAsFixed(widget.matchPercentage! % 1 == 0 ? 0 : 1)}% Matched'
+                            : 'Matched'),
                     style: TextStyle(
-                      color: Color(0xFF10B981),
+                      color: widget.isOffline
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFF10B981),
                       fontWeight: FontWeight.w900,
                       fontSize: 12,
                     ),
@@ -680,15 +710,25 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
                   const SizedBox(height: 12),
 
                   // Row 4: Status Indicator
-                  const Row(
+                  Row(
                     children: [
-                      SizedBox(width: 4),
-                      Icon(Icons.circle, color: Color(0xFF10B981), size: 8),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.circle,
+                        color: widget.isOffline
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF10B981),
+                        size: 8,
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        'Captured Online',
+                        widget.isOffline
+                            ? 'Secured Offline (Sync Pending)'
+                            : 'Captured Online',
                         style: TextStyle(
-                          color: Color(0xFF10B981),
+                          color: widget.isOffline
+                              ? const Color(0xFFF59E0B)
+                              : const Color(0xFF10B981),
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
                         ),

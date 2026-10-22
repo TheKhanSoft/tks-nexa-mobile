@@ -111,7 +111,8 @@ class TfliteFaceVerificationService implements FaceVerificationService {
     }
 
     // Perform genuine 1:1 on-device facial matching if reference template is available
-    double similarity = 0.0;
+    double? similarity;
+    bool isOfflinePendingMatch = false;
     List<double> referenceVector = enrolledProfile.embedding;
 
     if (referenceVector.isEmpty && enrolledProfile.photoUrl != null && photoDownloader != null) {
@@ -138,8 +139,10 @@ class TfliteFaceVerificationService implements FaceVerificationService {
         similarity = 0.0;
       }
     } else {
-      // Handset has no enrolled vector template; cannot verify match on device
-      similarity = 0.0;
+      // Handset has no enrolled reference vector template (matching is authoritative online via API)
+      // Mark as pending match so offline punches record facial vectors without premature 0% failure
+      isOfflinePendingMatch = true;
+      similarity = null;
     }
 
     return LocalFaceVerification(
@@ -153,6 +156,7 @@ class TfliteFaceVerificationService implements FaceVerificationService {
           : 'MobileFaceNet (${liveEmbedding.length}-D)',
       liveVector: liveEmbedding,
       mirroredVector: mirroredEmbedding,
+      isOfflinePendingMatch: isOfflinePendingMatch,
     );
   }
 

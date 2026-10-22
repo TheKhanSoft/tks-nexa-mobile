@@ -746,6 +746,36 @@ class _TimelineNode extends StatelessWidget {
                           Text(tp.time, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
                           const Spacer(),
                           Builder(builder: (context) {
+                            final isOffline = tp.statusTag.toLowerCase().contains('offline') ||
+                                tp.statusTag.toLowerCase().contains('pending');
+                            if (isOffline) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.cloud_upload_outlined, size: 11, color: Color(0xFFD97706)),
+                                      SizedBox(width: 3.5),
+                                      Text(
+                                        'Offline Pending',
+                                        style: TextStyle(
+                                          color: Color(0xFFB45309),
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
                             final matchVal = tp.matchPercentage ?? tp.similarityScore;
                             if (matchVal == null || matchVal <= 0) return const SizedBox.shrink();
                             return Padding(

@@ -34,6 +34,8 @@ class MobilePunchLogItem {
   final String? photoPath;
   final String? photoUrl;
   final String? verificationCode;
+
+  bool get isOffline => status.toLowerCase().contains('offline') || status.toLowerCase().contains('pending');
 }
 
 DateTime _combineDateAndTime(DateTime date, String? timeStr) {

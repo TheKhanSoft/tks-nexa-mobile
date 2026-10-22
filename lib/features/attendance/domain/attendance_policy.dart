@@ -13,6 +13,7 @@ class AttendancePolicy {
     required this.uwbProximityEnabled,
     required this.wifiRttProximityEnabled,
     this.maximumLocationAccuracyM,
+    this.offlineAttendanceEnabled = false,
   });
 
   final bool mobileAttendanceEnabled;
@@ -28,4 +29,5 @@ class AttendancePolicy {
   final bool uwbProximityEnabled;
   final bool wifiRttProximityEnabled;
   final double? maximumLocationAccuracyM;
+  final bool offlineAttendanceEnabled;
 }

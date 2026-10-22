@@ -42,9 +42,9 @@ class AttendanceMarkRequest {
   Map<String, Object> toJson() {
     final locName = locationName ?? location.locationName;
     final rawSim = verification.similarity;
-    final clampedScore = (rawSim.isFinite && !rawSim.isNaN)
+    final clampedScore = (rawSim != null && rawSim.isFinite && !rawSim.isNaN)
         ? (rawSim < 0.0 ? 0.0 : rawSim)
-        : 0.0;
+        : null;
 
     final localCaptured = capturedAt.toLocal();
     final localDateStr =
@@ -56,8 +56,10 @@ class AttendanceMarkRequest {
       'challenge_id': challengeId,
       'verified_method': 'face_biometric',
       'verification_method': 'Face Biometric',
-      'confidence_score': clampedScore,
-      'similarity_score': clampedScore,
+      if (clampedScore != null) ...{
+        'confidence_score': clampedScore,
+        'similarity_score': clampedScore,
+      },
       'match_threshold': verification.threshold,
       if (verification.liveVector != null)
         'face_vector': verification.liveVector!,
@@ -117,7 +119,8 @@ class AttendanceMarkRequest {
           'wifi_gateway_ip': location.wifiGatewayIp!,
       },
       'biometrics': <String, Object>{
-        'similarity_score': clampedScore,
+        if (clampedScore != null) 'similarity_score': clampedScore,
+        if (verification.isOfflinePendingMatch) 'offline_pending_match': true,
         'liveness_verified': verification.livenessPassed,
         'verification_method': 'Face Biometric',
         if (verification.liveVector != null)

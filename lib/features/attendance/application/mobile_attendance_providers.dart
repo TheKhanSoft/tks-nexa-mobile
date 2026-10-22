@@ -123,20 +123,35 @@ final attendanceChallengeProvider =
         } catch (_) {}
       }
       try {
-        return await ref
+        final challenge = await ref
             .watch(mobileAttendanceServiceProvider)
             .requestChallenge(deviceId: deviceId);
+        try {
+          await ref.read(secureStorageServiceProvider).write(
+                'offline_attendance_enabled',
+                challenge.policy.offlineAttendanceEnabled ? 'true' : 'false',
+              );
+        } catch (_) {}
+        return challenge;
       } catch (_) {
         final now = DateTime.now().toUtc();
+        bool isOfflineAllowed = false;
+        try {
+          final cached = await ref
+              .read(secureStorageServiceProvider)
+              .read('offline_attendance_enabled');
+          isOfflineAllowed = cached == 'true';
+        } catch (_) {}
         return AttendanceChallenge(
           id: 'offline_${now.millisecondsSinceEpoch}',
           nonce: 'offline_nonce_${now.millisecondsSinceEpoch}',
           serverTimestamp: now,
           expiresAt: now.add(const Duration(hours: 24)),
-          policy: const AttendanceChallengePolicy(
+          policy: AttendanceChallengePolicy(
             polygonGeofenceEnabled: false,
             requireAppIntegrity: false,
             cameraVerificationEnabled: false,
+            offlineAttendanceEnabled: isOfflineAllowed,
           ),
         );
       }
@@ -251,10 +266,13 @@ class AttendanceSubmissionController
         );
       }
       if (!verification.matched) {
+        final simPct = verification.similarity != null
+            ? '${(verification.similarity! * 100).toStringAsFixed(1)}%'
+            : '0.0%';
         throw AppFailure(
           code: FailureCode.invalidInput,
           message:
-              'Facial similarity score (${(verification.similarity * 100).toStringAsFixed(1)}%) is below the required ${(profile.matchThreshold * 100).toStringAsFixed(1)}% matching threshold.',
+              'Facial similarity score ($simPct) is below the required ${(profile.matchThreshold * 100).toStringAsFixed(1)}% matching threshold.',
           diagnosticCode: 'CONFIDENCE_BELOW_THRESHOLD',
         );
       }
@@ -326,6 +344,14 @@ class AttendanceSubmissionController
       final clockVerdict = trustedTimeService.checkClockIntegrity(capturedAt);
 
       Future<AttendanceMarkResult> createOfflineResult() async {
+        if (!challenge.policy.offlineAttendanceEnabled) {
+          throw const AppFailure(
+            code: FailureCode.invalidInput,
+            message:
+                'Offline attendance is disabled by your organization policy. Please connect to the internet to record attendance.',
+            diagnosticCode: 'OFFLINE_ATTENDANCE_DISABLED',
+          );
+        }
         final offlineId = 'offline_${capturedAt.toUtc().millisecondsSinceEpoch}';
         final payloadMap = markRequest.toJson();
         final hash = OfflinePunchItem.generatePayloadHash(
@@ -350,13 +376,13 @@ class AttendanceSubmissionController
         await ref.read(offlinePunchOutboxProvider).enqueue(offlineItem);
         unawaited(ref.read(offlinePunchSyncProvider.notifier).refreshPendingCount());
         return AttendanceMarkResult(
-          message: 'Punch secured offline. Will auto-sync when network reconnects.',
+          message: 'Punch secured offline. Facial features and location recorded and will be verified once online.',
           attendanceId: offlineId,
           recordedAt: capturedAt,
           type: null,
-          similarityScore: verification.similarity * 100,
+          similarityScore: verification.similarity != null ? verification.similarity! * 100 : null,
           trustScore: 90,
-          trustLevel: 'Offline Verified',
+          trustLevel: 'Offline Secured',
           isOffline: true,
         );
       }
@@ -384,10 +410,11 @@ class AttendanceSubmissionController
               attendanceId: result.attendanceId,
               recordedAt: result.recordedAt,
               type: result.type,
-              similarityScore: verification.similarity * 100,
+              similarityScore: verification.similarity != null ? verification.similarity! * 100 : null,
               trustScore: result.trustScore,
               trustLevel: result.trustLevel,
               cameraCorroboration: result.cameraCorroboration,
+              isOffline: result.isOffline,
             );
       await ref.read(localSelfieStorageProvider).saveSelfie(
             imageBytes: capture.bytes,

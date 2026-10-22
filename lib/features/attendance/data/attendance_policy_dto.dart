@@ -34,6 +34,10 @@ class AttendancePolicyDto {
         maximumLocationAccuracyM: _optionalPositiveDouble(
           json['maximum_location_accuracy_m'],
         ),
+        offlineAttendanceEnabled: _optionalBool(
+          json,
+          'offline_attendance_enabled',
+        ),
       );
     } on Object {
       throw const AppFailure(

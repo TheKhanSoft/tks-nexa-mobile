@@ -532,10 +532,24 @@ class _OfflinePunchCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      if (similarity != null) ...[
+                      if (similarity != null && similarity > 0) ...[
                         const SizedBox(height: 2),
                         Text(
                           'Similarity Match: ${(similarity > 1.0 ? similarity : similarity * 100).toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: item.isRejected
+                                ? const Color(0xFFDC2626)
+                                : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          item.isRejected
+                              ? 'Face Match: Verification Failed'
+                              : 'Face Match: Pending Online Verification',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,

@@ -36,6 +36,9 @@ class AttendanceChallengeDto {
           cameraVerificationEnabled: _bool(
             policyJson['camera_verification_enabled'],
           ),
+          offlineAttendanceEnabled: _bool(
+            policyJson['offline_attendance_enabled'],
+          ),
         ),
         location: locationJson == null
             ? null
