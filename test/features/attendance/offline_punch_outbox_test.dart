@@ -90,6 +90,7 @@ class MockMobileAttendanceService implements MobileAttendanceService {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late Directory tempDir;
   late FileOfflinePunchOutbox outbox;
 

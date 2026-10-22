@@ -1,13 +1,21 @@
+import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tks_nexa_attendance/core/config/app_config.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
+import 'package:tks_nexa_attendance/core/security/offline_security_token_service.dart';
+import 'package:tks_nexa_attendance/core/security/trusted_time_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_history_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/offline_punch_outbox.dart';
+import 'package:tks_nexa_attendance/features/attendance/domain/device_security_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/mobile_attendance_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/offline_punch_item.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/mobile_attendance_log_screen.dart';
 import 'package:tks_nexa_attendance/features/notifications/application/notification_inbox_service.dart';
 import 'package:tks_nexa_attendance/features/notifications/domain/app_notification_item.dart';
+import 'package:tks_nexa_attendance/features/organization/application/organization_providers.dart';
 
 class SyncResult {
   const SyncResult({
@@ -70,6 +78,7 @@ class OfflineSyncState {
 
 class OfflinePunchSyncController extends AsyncNotifier<OfflineSyncState> {
   OfflinePunchOutbox get _outbox => ref.read(offlinePunchOutboxProvider);
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
   @override
   Future<OfflineSyncState> build() async {
@@ -77,11 +86,37 @@ class OfflinePunchSyncController extends AsyncNotifier<OfflineSyncState> {
     final all = await outbox.getAll();
     final pending = all.where((i) => i.isPending || i.isFailed).length;
     final rejected = all.where((i) => i.isRejected).length;
+
+    // Automatically sync queued offline punches as soon as network reconnects
+    try {
+      _connectivitySubscription?.cancel();
+      _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+        final isConnected = results.any((r) => r != ConnectivityResult.none);
+        if (isConnected) {
+          _triggerAutoSyncIfPending();
+        }
+      });
+    } catch (_) {
+      // In headless unit test environments without platform channels, ignore
+    }
+
+    ref.onDispose(() {
+      _connectivitySubscription?.cancel();
+    });
+
     return OfflineSyncState(
       pendingCount: pending,
       rejectedCount: rejected,
       items: all,
     );
+  }
+
+  void _triggerAutoSyncIfPending() {
+    final current = state.value;
+    if (current != null && current.pendingCount > 0 && !current.isSyncing) {
+      debugPrint('[OfflineSync] Network connected. Auto-syncing ${current.pendingCount} pending punches...');
+      unawaited(syncAll());
+    }
   }
 
   Future<void> refresh() async {
@@ -97,7 +132,10 @@ class OfflinePunchSyncController extends AsyncNotifier<OfflineSyncState> {
     );
   }
 
-  Future<void> refreshPendingCount() => refresh();
+  Future<void> refreshPendingCount() async {
+    await refresh();
+    _triggerAutoSyncIfPending();
+  }
 
   Future<void> removePunch(String id) async {
     await _outbox.remove(id);
@@ -231,6 +269,54 @@ class OfflinePunchSyncController extends AsyncNotifier<OfflineSyncState> {
               'Mock GPS location provider detected during offline capture';
         }
 
+        // Generate encrypted, HMAC-signed anti-tampering security token
+        String? secret;
+        try {
+          secret = ref.read(appConfigProvider).mobileApiSecret;
+        } catch (_) {}
+
+        DeviceTimeIntegrity? currentIntegrity;
+        try {
+          final secService = ref.read(deviceSecurityServiceProvider);
+          currentIntegrity = await secService.getDeviceTimeIntegrity();
+        } catch (_) {}
+
+        final syncElapsedMs = currentIntegrity?.elapsedRealtimeMs ?? DateTime.now().toUtc().millisecondsSinceEpoch;
+        final punchElapsedMs = item.elapsedRealtimeMsAtPunch ?? item.capturedAt.toUtc().millisecondsSinceEpoch;
+        final monotonicDeltaMs = (currentIntegrity != null && item.elapsedRealtimeMsAtPunch != null)
+            ? (syncElapsedMs - punchElapsedMs)
+            : nowUtc.difference(capturedUtc).inMilliseconds;
+
+        DateTime? anchor;
+        try {
+          anchor = ref.read(trustedTimeServiceProvider).lastServerAnchorUtc;
+        } catch (_) {}
+
+        final tokenPayload = {
+          'punch_id': item.id,
+          'device_id': payload['device_id'] ?? '',
+          'captured_at': capturedUtc.toIso8601String(),
+          'device_wall_time_ms': item.capturedAt.millisecondsSinceEpoch,
+          'punch_elapsed_realtime_ms': punchElapsedMs,
+          'sync_elapsed_realtime_ms': syncElapsedMs,
+          'monotonic_elapsed_ms': monotonicDeltaMs,
+          'is_auto_time': item.isAutoTime,
+          'last_server_anchor_utc': anchor?.toIso8601String(),
+          'clock_skew_seconds': item.clockSkewSeconds ?? 0,
+          'is_time_manipulated': item.isTimeManipulated,
+          'payload_hash': item.payloadHash ?? '',
+          'created_at_epoch': nowUtc.millisecondsSinceEpoch ~/ 1000,
+        };
+
+        if (secret != null && secret.isNotEmpty) {
+          final offlineSecurityToken = OfflineSecurityTokenService.createToken(
+            payload: tokenPayload,
+            secret: secret,
+          );
+          payload['offline_security_token'] = offlineSecurityToken;
+          payload['offline_sync_token'] = offlineSecurityToken;
+        }
+
         await activeService.submitRawPunchPayload(payload);
         await _outbox.remove(item.id);
         synced++;
@@ -284,6 +370,13 @@ class OfflinePunchSyncController extends AsyncNotifier<OfflineSyncState> {
     if (synced > 0) {
       ref.invalidate(attendanceHistoryResponseProvider);
       ref.invalidate(mobilePunchLogsProvider);
+      try {
+        ref.read(notificationInboxProvider.notifier).addNotification(
+          title: 'Offline Attendance Synced',
+          body: 'Successfully synced $synced offline attendance punch${synced > 1 ? 'es' : ''}.',
+          category: NotificationCategory.system,
+        );
+      } catch (_) {}
     }
 
     final allAfter = await _outbox.getAll();

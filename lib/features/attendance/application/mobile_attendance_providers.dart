@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
@@ -332,6 +333,7 @@ class AttendanceSubmissionController
           capturedAt: capturedAt,
           payload: payloadMap,
         );
+        final timeIntegrity = await securityService.getDeviceTimeIntegrity();
         final offlineItem = OfflinePunchItem(
           id: offlineId,
           capturedAt: capturedAt,
@@ -340,8 +342,10 @@ class AttendanceSubmissionController
           createdAt: DateTime.now().toUtc(),
           payloadHash: hash,
           clockSkewSeconds: clockVerdict.clockSkewSeconds,
-          isTimeManipulated: clockVerdict.isTimeManipulated,
+          isTimeManipulated: clockVerdict.isTimeManipulated || (timeIntegrity != null && !timeIntegrity.isAutoTimeEnabled),
           isMockLocation: resolvedLocation.isMocked,
+          elapsedRealtimeMsAtPunch: timeIntegrity?.elapsedRealtimeMs,
+          isAutoTime: timeIntegrity?.isAutoTimeEnabled ?? true,
         );
         await ref.read(offlinePunchOutboxProvider).enqueue(offlineItem);
         unawaited(ref.read(offlinePunchSyncProvider.notifier).refreshPendingCount());

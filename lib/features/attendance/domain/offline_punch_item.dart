@@ -35,6 +35,8 @@ class OfflinePunchItem {
     this.clockSkewSeconds,
     this.isTimeManipulated = false,
     this.isMockLocation = false,
+    this.elapsedRealtimeMsAtPunch,
+    this.isAutoTime = true,
   });
 
   final String id;
@@ -48,6 +50,8 @@ class OfflinePunchItem {
   final int? clockSkewSeconds;
   final bool isTimeManipulated;
   final bool isMockLocation;
+  final int? elapsedRealtimeMsAtPunch;
+  final bool isAutoTime;
 
   static String generatePayloadHash({
     required String id,
@@ -122,6 +126,8 @@ class OfflinePunchItem {
     int? clockSkewSeconds,
     bool? isTimeManipulated,
     bool? isMockLocation,
+    int? elapsedRealtimeMsAtPunch,
+    bool? isAutoTime,
   }) {
     return OfflinePunchItem(
       id: id ?? this.id,
@@ -135,6 +141,8 @@ class OfflinePunchItem {
       clockSkewSeconds: clockSkewSeconds ?? this.clockSkewSeconds,
       isTimeManipulated: isTimeManipulated ?? this.isTimeManipulated,
       isMockLocation: isMockLocation ?? this.isMockLocation,
+      elapsedRealtimeMsAtPunch: elapsedRealtimeMsAtPunch ?? this.elapsedRealtimeMsAtPunch,
+      isAutoTime: isAutoTime ?? this.isAutoTime,
     );
   }
 
@@ -150,6 +158,9 @@ class OfflinePunchItem {
         if (clockSkewSeconds != null) 'clock_skew_seconds': clockSkewSeconds,
         'is_time_manipulated': isTimeManipulated,
         'is_mock_location': isMockLocation,
+        if (elapsedRealtimeMsAtPunch != null)
+          'elapsed_realtime_ms_at_punch': elapsedRealtimeMsAtPunch,
+        'is_auto_time': isAutoTime,
       };
 
   factory OfflinePunchItem.fromJson(Map<String, dynamic> json) {
@@ -200,6 +211,8 @@ class OfflinePunchItem {
       clockSkewSeconds: (json['clock_skew_seconds'] as num?)?.toInt(),
       isTimeManipulated: json['is_time_manipulated'] == true,
       isMockLocation: json['is_mock_location'] == true,
+      elapsedRealtimeMsAtPunch: (json['elapsed_realtime_ms_at_punch'] as num?)?.toInt(),
+      isAutoTime: json['is_auto_time'] != false,
     );
   }
 }

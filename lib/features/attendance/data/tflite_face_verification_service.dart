@@ -6,6 +6,7 @@ import 'package:image/image.dart' as image;
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/biometric_photo_crop_helper.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/cosine_face_matcher.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_biometric_profile.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_capture_evidence.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/face_verification_service.dart';
@@ -109,11 +110,40 @@ class TfliteFaceVerificationService implements FaceVerificationService {
       );
     }
 
-    // Reference vector is never stored on the mobile handset;
-    // this 192-D Float32 vector is sent to the central server in the punch payload
-    // where authoritative matching is performed against the enrolled template.
+    // Perform genuine 1:1 on-device facial matching if reference template is available
+    double similarity = 0.0;
+    List<double> referenceVector = enrolledProfile.embedding;
+
+    if (referenceVector.isEmpty && enrolledProfile.photoUrl != null && photoDownloader != null) {
+      try {
+        final photoBytes = await photoDownloader!(enrolledProfile.photoUrl!);
+        if (photoBytes != null && photoBytes.isNotEmpty) {
+          referenceVector = await extractEmbeddingFromBytes(photoBytes);
+        }
+      } catch (e) {
+        debugPrint('[Biometrics] Failed to extract embedding from photoUrl: $e');
+      }
+    }
+
+    if (referenceVector.isNotEmpty) {
+      if (referenceVector.length == liveEmbedding.length) {
+        final simA = CosineFaceMatcher.compare(liveEmbedding, referenceVector);
+        final simB = CosineFaceMatcher.compare(mirroredEmbedding, referenceVector);
+        final rawMax = math.max(simA, simB);
+        similarity = (CosineFaceMatcher.calibrateToPercentage(rawMax) / 100.0).clamp(0.0, 1.0);
+      } else {
+        debugPrint(
+          '[Biometrics] Reference dim (${referenceVector.length}) differs from model dim (${liveEmbedding.length})',
+        );
+        similarity = 0.0;
+      }
+    } else {
+      // Handset has no enrolled vector template; cannot verify match on device
+      similarity = 0.0;
+    }
+
     return LocalFaceVerification(
-      similarity: capture.livenessPassed ? 1.0 : 0.0,
+      similarity: similarity,
       threshold: enrolledProfile.matchThreshold,
       livenessPassed:
           !enrolledProfile.livenessRequired || capture.livenessPassed,

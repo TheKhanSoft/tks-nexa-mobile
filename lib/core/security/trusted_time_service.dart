@@ -38,6 +38,8 @@ class TrustedTimeService {
 
   static const _storageKeyLatestServerTime = 'tks_trusted_time_latest_server_iso';
 
+  DateTime? get lastServerAnchorUtc => _lastServerAnchorUtc ?? _persistedLatestServerTimeUtc;
+
   Future<void> _init() async {
     try {
       if (storage == null) return;
