@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
+import 'package:tks_nexa_attendance/core/security/trusted_time_service.dart';
 import 'package:tks_nexa_attendance/core/network/dio_factory.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/face_verification_service_factory.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
@@ -320,47 +321,31 @@ class AttendanceSubmissionController
       );
 
       AttendanceMarkResult result;
-      try {
-        result = await ref
-            .read(mobileAttendanceServiceProvider)
-            .markAttendance(markRequest);
-      } on AppFailure catch (failure) {
-        if (failure.code == FailureCode.unavailable) {
-          final offlineId = 'offline_${capturedAt.toUtc().millisecondsSinceEpoch}';
-          final offlineItem = OfflinePunchItem(
-            id: offlineId,
-            capturedAt: capturedAt,
-            requestPayload: markRequest.toJson(),
-            status: OfflinePunchStatus.pending,
-            createdAt: DateTime.now().toUtc(),
-          );
-          await ref.read(offlinePunchOutboxProvider).enqueue(offlineItem);
-          unawaited(ref.read(offlinePunchSyncProvider.notifier).refreshPendingCount());
-          result = AttendanceMarkResult(
-            message: 'Punch secured offline. Will auto-sync when network reconnects.',
-            attendanceId: offlineId,
-            recordedAt: capturedAt,
-            type: null,
-            similarityScore: verification.similarity * 100,
-            trustScore: 90,
-            trustLevel: 'Offline Verified',
-            isOffline: true,
-          );
-        } else {
-          rethrow;
-        }
-      } catch (e) {
+      final trustedTimeService = ref.read(trustedTimeServiceProvider);
+      final clockVerdict = trustedTimeService.checkClockIntegrity(capturedAt);
+
+      Future<AttendanceMarkResult> createOfflineResult() async {
         final offlineId = 'offline_${capturedAt.toUtc().millisecondsSinceEpoch}';
+        final payloadMap = markRequest.toJson();
+        final hash = OfflinePunchItem.generatePayloadHash(
+          id: offlineId,
+          capturedAt: capturedAt,
+          payload: payloadMap,
+        );
         final offlineItem = OfflinePunchItem(
           id: offlineId,
           capturedAt: capturedAt,
-          requestPayload: markRequest.toJson(),
+          requestPayload: payloadMap,
           status: OfflinePunchStatus.pending,
           createdAt: DateTime.now().toUtc(),
+          payloadHash: hash,
+          clockSkewSeconds: clockVerdict.clockSkewSeconds,
+          isTimeManipulated: clockVerdict.isTimeManipulated,
+          isMockLocation: resolvedLocation.isMocked,
         );
         await ref.read(offlinePunchOutboxProvider).enqueue(offlineItem);
         unawaited(ref.read(offlinePunchSyncProvider.notifier).refreshPendingCount());
-        result = AttendanceMarkResult(
+        return AttendanceMarkResult(
           message: 'Punch secured offline. Will auto-sync when network reconnects.',
           attendanceId: offlineId,
           recordedAt: capturedAt,
@@ -370,6 +355,23 @@ class AttendanceSubmissionController
           trustLevel: 'Offline Verified',
           isOffline: true,
         );
+      }
+
+      try {
+        result = await ref
+            .read(mobileAttendanceServiceProvider)
+            .markAttendance(markRequest);
+        if (result.recordedAt != null) {
+          trustedTimeService.recordServerAnchor(result.recordedAt!);
+        }
+      } on AppFailure catch (failure) {
+        if (failure.code == FailureCode.unavailable) {
+          result = await createOfflineResult();
+        } else {
+          rethrow;
+        }
+      } catch (e) {
+        result = await createOfflineResult();
       }
       final resolvedResult = (result.similarityScore != null && result.similarityScore! > 0)
           ? result

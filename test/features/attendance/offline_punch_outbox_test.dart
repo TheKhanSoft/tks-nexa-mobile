@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
+import 'package:tks_nexa_attendance/core/security/trusted_time_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/offline_punch_sync_service.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/offline_punch_outbox.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_challenge.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_mark.dart';
@@ -340,6 +342,123 @@ void main() {
       await controller.removePunch('punch_to_remove');
       expect(container.read(offlinePunchSyncProvider).value!.rejectedCount, equals(0));
       expect(await outbox.getAll(), isEmpty);
+    });
+
+    test('syncAll injects complete date/time metadata preserving original capture date', () async {
+      // Offline punch captured at 8:45 AM yesterday
+      final yesterdayCaptured = DateTime(2026, 10, 21, 8, 45, 30);
+      final payload = {
+        'challenge_id': 'ch_yesterday',
+        'device_id': 'device_test_1',
+        'latitude': 34.1989,
+        'longitude': 72.0404,
+      };
+      final hash = OfflinePunchItem.generatePayloadHash(
+        id: 'punch_yesterday',
+        capturedAt: yesterdayCaptured,
+        payload: payload,
+      );
+
+      await outbox.enqueue(OfflinePunchItem(
+        id: 'punch_yesterday',
+        capturedAt: yesterdayCaptured,
+        requestPayload: payload,
+        status: OfflinePunchStatus.pending,
+        createdAt: yesterdayCaptured,
+        payloadHash: hash,
+        clockSkewSeconds: 0,
+      ));
+
+      final controller = container.read(offlinePunchSyncProvider.notifier);
+      final result = await controller.syncAll(overrideService: mockService);
+
+      expect(result.syncedCount, equals(1));
+      expect(mockService.submittedPayloads.length, equals(1));
+
+      final submitted = mockService.submittedPayloads.first;
+      expect(submitted['is_offline'], isTrue);
+      expect(submitted['offline_sync'], isTrue);
+      // Punch date MUST be preserved as yesterday's date
+      expect(submitted['attendance_date'], equals('2026-10-21'));
+      expect(submitted['date'], equals('2026-10-21'));
+      expect(submitted['punch_time'], equals('08:45:30'));
+      expect(submitted['time'], equals('08:45:30'));
+      expect(submitted['recorded_at'], equals(yesterdayCaptured.toUtc().toIso8601String()));
+      expect(submitted['offline_captured_at'], equals(yesterdayCaptured.toUtc().toIso8601String()));
+      expect(submitted['synced_at'], isNotNull);
+      expect(submitted['sync_delay_seconds'], isNotNull);
+    });
+
+    test('tampered payload fails integrity verification and is rejected from sync', () async {
+      final now = DateTime.utc(2026, 10, 22, 9, 0);
+      final originalPayload = {
+        'challenge_id': 'ch_secure',
+        'latitude': 34.1989,
+        'longitude': 72.0404,
+      };
+      final hash = OfflinePunchItem.generatePayloadHash(
+        id: 'tamper_test_1',
+        capturedAt: now,
+        payload: originalPayload,
+      );
+
+      // Maliciously modify the payload (e.g. change GPS coordinates on device)
+      final tamperedPayload = {
+        'challenge_id': 'ch_secure',
+        'latitude': 40.7128, // Altered
+        'longitude': -74.0060, // Altered
+      };
+
+      await outbox.enqueue(OfflinePunchItem(
+        id: 'tamper_test_1',
+        capturedAt: now,
+        requestPayload: tamperedPayload,
+        status: OfflinePunchStatus.pending,
+        createdAt: now,
+        payloadHash: hash,
+      ));
+
+      final controller = container.read(offlinePunchSyncProvider.notifier);
+      final result = await controller.syncAll(overrideService: mockService);
+
+      // The tampered punch should NOT be synced to server
+      expect(result.syncedCount, equals(0));
+      expect(mockService.submittedPayloads, isEmpty);
+
+      final all = await outbox.getAll();
+      final item = all.firstWhere((i) => i.id == 'tamper_test_1');
+      expect(item.status, equals(OfflinePunchStatus.rejected));
+      expect(item.lastError, contains('altered or tampered'));
+      expect(await outbox.getPendingCount(), equals(0));
+    });
+  });
+
+  group('TrustedTimeService Tests', () {
+    test('detects clock skew when device clock rolls backward', () {
+      final service = TrustedTimeService();
+      final serverNow = DateTime.utc(2026, 10, 22, 10, 0);
+      service.recordServerAnchor(serverNow);
+
+      // Emulate device clock rolled back to 8:30 AM (90 minutes behind)
+      final rolledBackDeviceTime = DateTime.utc(2026, 10, 22, 8, 30);
+      final verdict = service.checkClockIntegrity(rolledBackDeviceTime);
+
+      expect(verdict.isTimeManipulated, isTrue);
+      expect(verdict.clockSkewSeconds, lessThan(-5000));
+      expect(verdict.reason, contains('Device clock appears to be rolled backwards'));
+    });
+
+    test('accepts device time within acceptable drift threshold', () {
+      final service = TrustedTimeService();
+      final serverNow = DateTime.now().toUtc();
+      service.recordServerAnchor(serverNow);
+
+      // Normal clock with 30s drift
+      final normalTime = serverNow.add(const Duration(seconds: 30));
+      final verdict = service.checkClockIntegrity(normalTime);
+
+      expect(verdict.isTimeManipulated, isFalse);
+      expect(verdict.clockSkewSeconds.abs(), lessThanOrEqualTo(180));
     });
   });
 }

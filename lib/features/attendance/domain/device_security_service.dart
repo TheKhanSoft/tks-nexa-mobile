@@ -49,6 +49,20 @@ class WifiNetworkEvidence {
   final String? gatewayIp;
 }
 
+class DeviceTimeIntegrity {
+  const DeviceTimeIntegrity({
+    required this.elapsedRealtimeMs,
+    required this.currentTimeMillis,
+    required this.isAutoTimeEnabled,
+    required this.isAutoTimeZoneEnabled,
+  });
+
+  final int elapsedRealtimeMs;
+  final int currentTimeMillis;
+  final bool isAutoTimeEnabled;
+  final bool isAutoTimeZoneEnabled;
+}
+
 abstract interface class DeviceSecurityService {
   Future<DeviceKeyDetails?> getDeviceKey();
 
@@ -61,4 +75,6 @@ abstract interface class DeviceSecurityService {
   Future<DeviceSecurityStatus> checkDeviceSecurity();
 
   Future<WifiNetworkEvidence> getWifiDetails();
+
+  Future<DeviceTimeIntegrity?> getDeviceTimeIntegrity();
 }

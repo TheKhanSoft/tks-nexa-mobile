@@ -141,7 +141,7 @@ class ShiftDetailBottomSheet extends ConsumerWidget {
           deviceSource: 'edge_node',
           latitude: record.latitude,
           longitude: record.longitude,
-          snapshotUrl: null,
+          snapshotUrl: record.photoUrl,
           timestamp: outDt,
         ),
     ];

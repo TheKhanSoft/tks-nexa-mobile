@@ -372,6 +372,19 @@ class AttendanceRecordDto {
                     map['selfie_url'],
                     fallback: _string(
                       map['face_photo_url'],
+                      fallback: _string(
+                        map['snapshot_base64'],
+                        fallback: _string(
+                          map['photo_base64'],
+                          fallback: _string(
+                            map['face_snapshot'],
+                            fallback: _string(
+                              map['snapshot'],
+                              fallback: _string(map['photo']),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

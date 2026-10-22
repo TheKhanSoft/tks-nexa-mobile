@@ -180,8 +180,58 @@ class OfflinePunchSyncController extends AsyncNotifier<OfflineSyncState> {
     }
 
     for (final item in pending) {
+      if (!item.verifyIntegrity()) {
+        final updated = item.copyWith(
+          status: OfflinePunchStatus.rejected,
+          lastError: 'Integrity check failed: punch payload was tampered with.',
+        );
+        await _outbox.update(updated);
+        rejected++;
+        continue;
+      }
+
       try {
-        await activeService.submitRawPunchPayload(item.requestPayload);
+        final payload = Map<String, dynamic>.from(item.requestPayload);
+        final capturedLocal = item.capturedAt.toLocal();
+        final capturedUtc = item.capturedAt.toUtc();
+        final nowUtc = DateTime.now().toUtc();
+        final dateStr =
+            '${capturedLocal.year}-${capturedLocal.month.toString().padLeft(2, '0')}-${capturedLocal.day.toString().padLeft(2, '0')}';
+        final timeStr =
+            '${capturedLocal.hour.toString().padLeft(2, '0')}:${capturedLocal.minute.toString().padLeft(2, '0')}:${capturedLocal.second.toString().padLeft(2, '0')}';
+
+        // Provide exhaustive date/time keys so backend cannot misplace the offline punch date
+        payload['is_offline'] = true;
+        payload['offline_sync'] = true;
+        payload['offline_captured_at'] = capturedUtc.toIso8601String();
+        payload['recorded_at'] = capturedUtc.toIso8601String();
+        payload['timestamp'] = capturedUtc.toIso8601String();
+        payload['captured_at'] = capturedUtc.toIso8601String();
+        payload['client_timestamp'] = capturedUtc.toIso8601String();
+        payload['attendance_date'] = dateStr;
+        payload['date'] = dateStr;
+        payload['attendance_time'] = timeStr;
+        payload['time'] = timeStr;
+        payload['punch_time'] = timeStr;
+        payload['punch_datetime'] = capturedLocal.toIso8601String();
+        payload['synced_at'] = nowUtc.toIso8601String();
+        payload['sync_delay_seconds'] = nowUtc.difference(capturedUtc).inSeconds;
+
+        if (item.clockSkewSeconds != null) {
+          payload['clock_skew_seconds'] = item.clockSkewSeconds;
+        }
+        if (item.isTimeManipulated) {
+          payload['is_time_manipulated'] = true;
+          payload['time_tamper_warning'] =
+              'Device clock mismatch of ${item.clockSkewSeconds}s detected during offline capture';
+        }
+        if (item.isMockLocation) {
+          payload['is_mocked'] = true;
+          payload['mock_location_warning'] =
+              'Mock GPS location provider detected during offline capture';
+        }
+
+        await activeService.submitRawPunchPayload(payload);
         await _outbox.remove(item.id);
         synced++;
       } on AppFailure catch (failure) {

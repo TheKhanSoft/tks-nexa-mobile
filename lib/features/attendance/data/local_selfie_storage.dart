@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -223,6 +224,59 @@ class LocalSelfieStorage {
           }
         }
       } catch (_) {}
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String?> saveSelfieFromBase64({
+    required String base64String,
+    required DateTime date,
+    required String type,
+    String? id,
+    String? verificationCode,
+  }) async {
+    try {
+      var raw = base64String.trim();
+      if (raw.startsWith('data:image')) {
+        final comma = raw.indexOf(',');
+        if (comma != -1) {
+          raw = raw.substring(comma + 1);
+        }
+      }
+      final bytes = base64Decode(raw);
+      return saveSelfie(
+        imageBytes: bytes,
+        date: date,
+        type: type,
+        id: id,
+        verificationCode: verificationCode,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> getAnySelfieForDate(DateTime date) async {
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      final selfieDir = Directory('${docDir.path}/$_dirName');
+      if (!await selfieDir.exists()) return null;
+
+      final localD = date.toLocal();
+      final localDateStr = _formatDate(localD);
+      final utcD = date.toUtc();
+      final utcDateStr = _formatDate(utcD);
+      final prefixes = {localDateStr, utcDateStr};
+
+      final allFiles = selfieDir.listSync().whereType<File>();
+      for (final f in allFiles) {
+        final bName = f.uri.pathSegments.last;
+        for (final p in prefixes) {
+          if (bName.startsWith('${p}_') && bName.endsWith('.jpg')) {
+            return f.path;
+          }
+        }
+      }
     } catch (_) {}
     return null;
   }

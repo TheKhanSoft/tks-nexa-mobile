@@ -99,6 +99,25 @@ class PlatformDeviceSecurityService implements DeviceSecurityService {
     }
   }
 
+  @override
+  Future<DeviceTimeIntegrity?> getDeviceTimeIntegrity() async {
+    if (kIsWeb) return null;
+    try {
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'getDeviceTimeIntegrity',
+      );
+      if (result == null) return null;
+      return DeviceTimeIntegrity(
+        elapsedRealtimeMs: (result['elapsedRealtimeMs'] as num?)?.toInt() ?? 0,
+        currentTimeMillis: (result['currentTimeMillis'] as num?)?.toInt() ?? 0,
+        isAutoTimeEnabled: result['isAutoTimeEnabled'] == true,
+        isAutoTimeZoneEnabled: result['isAutoTimeZoneEnabled'] == true,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   static String? _nonEmpty(String? value) {
     final normalized = value?.trim();
     return normalized == null || normalized.isEmpty ? null : normalized;

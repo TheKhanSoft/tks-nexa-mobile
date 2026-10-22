@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+
 enum OfflinePunchStatus {
   pending,
   syncing,
@@ -28,6 +31,10 @@ class OfflinePunchItem {
     required this.createdAt,
     this.syncAttempts = 0,
     this.lastError,
+    this.payloadHash,
+    this.clockSkewSeconds,
+    this.isTimeManipulated = false,
+    this.isMockLocation = false,
   });
 
   final String id;
@@ -37,6 +44,39 @@ class OfflinePunchItem {
   final DateTime createdAt;
   final int syncAttempts;
   final String? lastError;
+  final String? payloadHash;
+  final int? clockSkewSeconds;
+  final bool isTimeManipulated;
+  final bool isMockLocation;
+
+  static String generatePayloadHash({
+    required String id,
+    required DateTime capturedAt,
+    required Map<String, dynamic> payload,
+  }) {
+    // Generate deterministic digest over key security attributes
+    final canonical = [
+      id,
+      capturedAt.toUtc().toIso8601String(),
+      payload['challenge_id'] ?? '',
+      payload['device_id'] ?? '',
+      payload['latitude']?.toString() ?? '',
+      payload['longitude']?.toString() ?? '',
+      payload['similarity_score']?.toString() ?? '',
+      payload['snapshot_base64'] != null ? sha256.convert(utf8.encode(payload['snapshot_base64'] as String)).toString() : '',
+    ].join('|');
+    return sha256.convert(utf8.encode(canonical)).toString();
+  }
+
+  bool verifyIntegrity() {
+    if (payloadHash == null) return true; // Legacy items without hash
+    final expected = generatePayloadHash(
+      id: id,
+      capturedAt: capturedAt,
+      payload: requestPayload,
+    );
+    return expected == payloadHash;
+  }
 
   double? get similarityScore {
     final direct = requestPayload['similarity_score'] ?? requestPayload['confidence_score'];
@@ -78,6 +118,10 @@ class OfflinePunchItem {
     DateTime? createdAt,
     int? syncAttempts,
     String? lastError,
+    String? payloadHash,
+    int? clockSkewSeconds,
+    bool? isTimeManipulated,
+    bool? isMockLocation,
   }) {
     return OfflinePunchItem(
       id: id ?? this.id,
@@ -87,6 +131,10 @@ class OfflinePunchItem {
       createdAt: createdAt ?? this.createdAt,
       syncAttempts: syncAttempts ?? this.syncAttempts,
       lastError: lastError ?? this.lastError,
+      payloadHash: payloadHash ?? this.payloadHash,
+      clockSkewSeconds: clockSkewSeconds ?? this.clockSkewSeconds,
+      isTimeManipulated: isTimeManipulated ?? this.isTimeManipulated,
+      isMockLocation: isMockLocation ?? this.isMockLocation,
     );
   }
 
@@ -98,14 +146,35 @@ class OfflinePunchItem {
         'created_at': createdAt.toIso8601String(),
         'sync_attempts': syncAttempts,
         if (lastError != null) 'last_error': lastError,
+        if (payloadHash != null) 'payload_hash': payloadHash,
+        if (clockSkewSeconds != null) 'clock_skew_seconds': clockSkewSeconds,
+        'is_time_manipulated': isTimeManipulated,
+        'is_mock_location': isMockLocation,
       };
 
   factory OfflinePunchItem.fromJson(Map<String, dynamic> json) {
-    final rawError = json['last_error'] as String?;
+    var rawError = json['last_error'] as String?;
     var resolvedStatus = OfflinePunchStatus.values.firstWhere(
       (s) => s.name == json['status'],
       orElse: () => OfflinePunchStatus.pending,
     );
+
+    final storedHash = json['payload_hash'] as String?;
+    final capturedAt = DateTime.parse(json['captured_at'] as String);
+    final payload = Map<String, dynamic>.from(json['request_payload'] as Map);
+
+    // Verify cryptographic integrity if hash was stored
+    if (storedHash != null) {
+      final expected = generatePayloadHash(
+        id: json['id'] as String,
+        capturedAt: capturedAt,
+        payload: payload,
+      );
+      if (expected != storedHash) {
+        resolvedStatus = OfflinePunchStatus.rejected;
+        rawError = 'Security warning: Punch payload was altered or tampered with on device.';
+      }
+    }
 
     // Auto-migrate legacy items that were stuck due to similarity threshold or mismatch
     if (resolvedStatus != OfflinePunchStatus.synced && rawError != null) {
@@ -121,12 +190,16 @@ class OfflinePunchItem {
 
     return OfflinePunchItem(
       id: json['id'] as String,
-      capturedAt: DateTime.parse(json['captured_at'] as String),
-      requestPayload: Map<String, dynamic>.from(json['request_payload'] as Map),
+      capturedAt: capturedAt,
+      requestPayload: payload,
       status: resolvedStatus,
       createdAt: DateTime.parse(json['created_at'] as String),
       syncAttempts: (json['sync_attempts'] as num?)?.toInt() ?? 0,
       lastError: rawError,
+      payloadHash: storedHash,
+      clockSkewSeconds: (json['clock_skew_seconds'] as num?)?.toInt(),
+      isTimeManipulated: json['is_time_manipulated'] == true,
+      isMockLocation: json['is_mock_location'] == true,
     );
   }
 }

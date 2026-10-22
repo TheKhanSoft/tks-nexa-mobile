@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -7,6 +8,7 @@ import 'package:tks_nexa_attendance/core/config/app_config.dart';
 import 'package:tks_nexa_attendance/features/account/application/account_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_watermark_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
+import 'package:tks_nexa_attendance/features/attendance/data/offline_punch_outbox.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/punch_detail.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/mobile_attendance_log_screen.dart';
@@ -101,7 +103,7 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
       longitude: record.longitude,
       locationAddress: record.locationName,
       photoPath: localPhotoPath,
-      snapshotUrl: isCheckOut ? null : record.photoUrl,
+      snapshotUrl: record.photoUrl,
       statusLabel: isCheckOut ? 'Shift Out' : (record.isLate ? 'Late Arrival' : 'Shift In'),
       matchPercentage: record.trustScore?.toDouble() ?? 92.0,
       deviceLabel: record.deviceModel ?? record.deviceName ?? 'Authorized Device',
@@ -177,23 +179,99 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
     final isOut = widget.statusLabel.toLowerCase().contains('out') ||
         widget.statusLabel.toLowerCase().contains('exit');
 
-    // Try match by punch timestamp or verificationCode
-    final pMatch = await selfieStorage.getSelfiePath(
+    // Tier 1: Try match by punch timestamp or verificationCode
+    String? pMatch = await selfieStorage.getSelfiePath(
       date: widget.timestamp,
       timestamp: widget.timestamp,
       verificationCode: widget.verificationCode,
       type: isOut ? 'check_out' : 'check_in',
       exactOnly: false,
     );
+
+    // Tier 2: Try match by date alone (ignoring strict seconds/minutes drift)
+    if (pMatch == null) {
+      pMatch = await selfieStorage.getSelfiePath(
+        date: widget.timestamp,
+        verificationCode: widget.verificationCode,
+        type: isOut ? 'check_out' : 'check_in',
+        exactOnly: false,
+      );
+    }
+
+    // Tier 3: Try match any punch selfie saved on that date
+    if (pMatch == null) {
+      pMatch = await selfieStorage.getAnySelfieForDate(widget.timestamp);
+    }
+
+    // Tier 4: Look in offline outbox for any punch matching this date
+    if (pMatch == null) {
+      try {
+        final outbox = ref.read(offlinePunchOutboxProvider);
+        final items = await outbox.getAll();
+        final dateStr =
+            '${widget.timestamp.year}-${widget.timestamp.month.toString().padLeft(2, '0')}-${widget.timestamp.day.toString().padLeft(2, '0')}';
+        for (final item in items) {
+          final itemDateStr =
+              '${item.capturedAt.year}-${item.capturedAt.month.toString().padLeft(2, '0')}-${item.capturedAt.day.toString().padLeft(2, '0')}';
+          if (itemDateStr == dateStr && item.snapshotBase64 != null) {
+            pMatch = await selfieStorage.saveSelfieFromBase64(
+              base64String: item.snapshotBase64!,
+              date: widget.timestamp,
+              type: isOut ? 'check_out' : 'check_in',
+              id: item.id,
+            );
+            if (pMatch != null) break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Tier 5: If widget.snapshotUrl is base64, save to local selfie storage
+    if (pMatch == null && widget.snapshotUrl != null && _isBase64Photo(widget.snapshotUrl)) {
+      try {
+        pMatch = await selfieStorage.saveSelfieFromBase64(
+          base64String: widget.snapshotUrl!,
+          date: widget.timestamp,
+          type: isOut ? 'check_out' : 'check_in',
+        );
+      } catch (_) {}
+    }
+
     if (pMatch != null && File(pMatch).existsSync()) {
       if (mounted) setState(() => _resolvedPhotoPath = pMatch);
       return;
     }
   }
 
+  bool _isBase64Photo(String? raw) {
+    if (raw == null) return false;
+    final s = raw.trim();
+    return s.startsWith('data:image') ||
+        (s.length > 200 &&
+            !s.startsWith('http://') &&
+            !s.startsWith('https://') &&
+            !s.startsWith('/'));
+  }
+
+  Uint8List? _decodeBase64(String raw) {
+    try {
+      var s = raw.trim();
+      if (s.startsWith('data:image')) {
+        final comma = s.indexOf(',');
+        if (comma != -1) {
+          s = s.substring(comma + 1);
+        }
+      }
+      return base64Decode(s);
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool _isAvatarPhoto(String? rawUrl) {
     if (rawUrl == null || rawUrl.trim().isEmpty) return true;
     final trimmed = rawUrl.trim();
+    if (_isBase64Photo(trimmed)) return false; // Genuine punch photo
     try {
       final profile = ref.read(employeeProfileProvider).value;
       final empPhoto = profile?.photoUrl?.trim();
@@ -280,21 +358,29 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
     } else if (widget.snapshotUrl != null &&
         widget.snapshotUrl!.isNotEmpty &&
         !_isAvatarPhoto(widget.snapshotUrl)) {
-      try {
-        final resolvedUrl = _resolveRemoteUrl(widget.snapshotUrl!);
-        final headers = _buildAuthHeaders(widget.snapshotUrl!);
-        final dio = Dio();
-        final res = await dio.get<List<int>>(
-          resolvedUrl,
-          options: Options(
-            responseType: ResponseType.bytes,
-            headers: headers,
-          ),
-        );
-        if (res.data != null) {
-          rawBytes = Uint8List.fromList(res.data!);
-        }
-      } catch (_) {}
+      if (_isBase64Photo(widget.snapshotUrl)) {
+        rawBytes = _decodeBase64(widget.snapshotUrl!);
+      } else if (File(widget.snapshotUrl!).existsSync()) {
+        try {
+          rawBytes = await File(widget.snapshotUrl!).readAsBytes();
+        } catch (_) {}
+      } else {
+        try {
+          final resolvedUrl = _resolveRemoteUrl(widget.snapshotUrl!);
+          final headers = _buildAuthHeaders(widget.snapshotUrl!);
+          final dio = Dio();
+          final res = await dio.get<List<int>>(
+            resolvedUrl,
+            options: Options(
+              responseType: ResponseType.bytes,
+              headers: headers,
+            ),
+          );
+          if (res.data != null) {
+            rawBytes = Uint8List.fromList(res.data!);
+          }
+        } catch (_) {}
+      }
     }
 
     return watermarkService.generateWatermarkedImage(
@@ -702,6 +788,33 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
     if (widget.snapshotUrl != null &&
         widget.snapshotUrl!.isNotEmpty &&
         !_isAvatarPhoto(widget.snapshotUrl)) {
+      // 1. Check if snapshot is Base64 data URI or raw Base64
+      if (_isBase64Photo(widget.snapshotUrl)) {
+        final bytes = _decodeBase64(widget.snapshotUrl!);
+        if (bytes != null) {
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            cacheWidth: 800,
+            errorBuilder: (_, _, _) => _buildFallbackPhoto(),
+          );
+        }
+      }
+
+      // 2. Check if snapshot is a local file URI or path
+      try {
+        final localFile = File(widget.snapshotUrl!);
+        if (localFile.existsSync()) {
+          return Image.file(
+            localFile,
+            fit: BoxFit.cover,
+            cacheWidth: 800,
+            errorBuilder: (_, _, _) => _buildFallbackPhoto(),
+          );
+        }
+      } catch (_) {}
+
+      // 3. Network URL
       final resolvedUrl = _resolveRemoteUrl(widget.snapshotUrl!);
       final headers = _buildAuthHeaders(widget.snapshotUrl!);
       return Image.network(

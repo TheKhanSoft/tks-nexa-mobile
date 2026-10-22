@@ -172,6 +172,32 @@ class MainActivity : FlutterActivity() {
                             }
                     }
 
+                    "getDeviceTimeIntegrity" -> {
+                        val elapsedRealtimeMs = android.os.SystemClock.elapsedRealtime()
+                        val currentTimestampMs = System.currentTimeMillis()
+                        val isAutoTime = try {
+                            android.provider.Settings.Global.getInt(
+                                contentResolver,
+                                android.provider.Settings.Global.AUTO_TIME, 0
+                            ) > 0
+                        } catch (e: Exception) { true }
+                        val isAutoTimeZone = try {
+                            android.provider.Settings.Global.getInt(
+                                contentResolver,
+                                android.provider.Settings.Global.AUTO_TIME_ZONE, 0
+                            ) > 0
+                        } catch (e: Exception) { true }
+
+                        result.success(
+                            mapOf(
+                                "elapsedRealtimeMs" to elapsedRealtimeMs,
+                                "currentTimeMillis" to currentTimestampMs,
+                                "isAutoTimeEnabled" to isAutoTime,
+                                "isAutoTimeZoneEnabled" to isAutoTimeZone
+                            )
+                        )
+                    }
+
                     else -> result.notImplemented()
                 }
             }

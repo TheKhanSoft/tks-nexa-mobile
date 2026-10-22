@@ -46,6 +46,12 @@ class AttendanceMarkRequest {
         ? (rawSim < 0.0 ? 0.0 : rawSim)
         : 0.0;
 
+    final localCaptured = capturedAt.toLocal();
+    final localDateStr =
+        '${localCaptured.year}-${localCaptured.month.toString().padLeft(2, '0')}-${localCaptured.day.toString().padLeft(2, '0')}';
+    final localTimeStr =
+        '${localCaptured.hour.toString().padLeft(2, '0')}:${localCaptured.minute.toString().padLeft(2, '0')}:${localCaptured.second.toString().padLeft(2, '0')}';
+
     return {
       'challenge_id': challengeId,
       'verified_method': 'face_biometric',
@@ -64,6 +70,15 @@ class AttendanceMarkRequest {
       'liveness_challenge': verification.challenge,
       'face_model_version': 'Face Biometric (v1.0)',
       'timestamp': capturedAt.toUtc().toIso8601String(),
+      'recorded_at': capturedAt.toUtc().toIso8601String(),
+      'captured_at': capturedAt.toUtc().toIso8601String(),
+      'client_timestamp': capturedAt.toUtc().toIso8601String(),
+      'punch_time': localTimeStr,
+      'punch_datetime': localCaptured.toIso8601String(),
+      'attendance_date': localDateStr,
+      'attendance_time': localTimeStr,
+      'date': localDateStr,
+      'time': localTimeStr,
       'device_id': deviceId,
       if (deviceModel != null) 'device_model': deviceModel!,
       if (osVersion != null) 'os_version': osVersion!,
