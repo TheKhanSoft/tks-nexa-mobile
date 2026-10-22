@@ -11,6 +11,7 @@ import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record
 import 'package:tks_nexa_attendance/features/attendance/presentation/regularization_request_bottom_sheet.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/shift_detail_bottom_sheet.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/offline_punch_sync_service.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/offline_punches_sheet.dart';
 
 /// Attendance History page body.
 /// The app-bar and bottom navigation are provided by the parent shell.
@@ -1564,72 +1565,114 @@ class _OfflineOutboxBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final syncState =
         ref.watch(offlinePunchSyncProvider).value ?? const OfflineSyncState();
-    if (syncState.pendingCount == 0) return const SizedBox.shrink();
+    if (syncState.pendingCount == 0 && syncState.rejectedCount == 0) {
+      return const SizedBox.shrink();
+    }
+
+    final hasRejectedOnly = syncState.hasRejected && !syncState.hasPending;
+    final hasBoth = syncState.hasPending && syncState.hasRejected;
+
+    final bgColor = hasRejectedOnly
+        ? const Color(0xFFFEE2E2)
+        : (hasBoth ? const Color(0xFFFEF3C7) : Colors.amber.shade50);
+    final borderColor = hasRejectedOnly
+        ? const Color(0xFFFCA5A5)
+        : (hasBoth ? const Color(0xFFFCD34D) : Colors.amber.shade300);
+    final fgColor = hasRejectedOnly
+        ? const Color(0xFF991B1B)
+        : Colors.amber.shade900;
+    final icon = hasRejectedOnly
+        ? Icons.warning_amber_rounded
+        : Icons.cloud_off_rounded;
+
+    final titleText = hasRejectedOnly
+        ? '${syncState.rejectedCount} offline punch rejected (Face mismatch) • Tap to review'
+        : (hasBoth
+            ? '${syncState.pendingCount} pending • ${syncState.rejectedCount} rejected (Face mismatch)'
+            : '${syncState.pendingCount} punch${syncState.pendingCount == 1 ? '' : 'es'} pending upload (offline mode)');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
-        color: Colors.amber.shade50,
+        color: bgColor,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.amber.shade300),
+          side: BorderSide(color: borderColor),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            children: [
-              Icon(
-                Icons.cloud_off_rounded,
-                color: Colors.amber.shade800,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '${syncState.pendingCount} punch${syncState.pendingCount == 1 ? '' : 'es'} pending upload (offline mode)',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.amber.shade900,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => showOfflinePunchesSheet(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: fgColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    titleText,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: fgColor,
+                    ),
                   ),
                 ),
-              ),
-              TextButton.icon(
-                onPressed: syncState.isSyncing
-                    ? null
-                    : () async {
-                        final res = await ref
-                            .read(offlinePunchSyncProvider.notifier)
-                            .syncAll();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                res.syncedCount > 0
-                                    ? 'Successfully uploaded ${res.syncedCount} offline punch${res.syncedCount == 1 ? '' : 'es'}!'
-                                    : (res.errors.isNotEmpty
-                                        ? res.errors.first
-                                        : 'No punches were uploaded.'),
-                              ),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      },
-                icon: syncState.isSyncing
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.sync_rounded, size: 16),
-                label: Text(syncState.isSyncing ? 'Syncing...' : 'Sync Now'),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  foregroundColor: Colors.amber.shade900,
-                ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                if (syncState.hasPending)
+                  TextButton.icon(
+                    onPressed: syncState.isSyncing
+                        ? null
+                        : () async {
+                            final res = await ref
+                                .read(offlinePunchSyncProvider.notifier)
+                                .syncAll();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    res.syncedCount > 0
+                                        ? 'Successfully uploaded ${res.syncedCount} offline punch${res.syncedCount == 1 ? '' : 'es'}!'
+                                        : (res.rejectedCount > 0
+                                            ? '${res.rejectedCount} punch rejected (low similarity / mismatch).'
+                                            : (res.errors.isNotEmpty
+                                                ? res.errors.first
+                                                : 'No punches were uploaded.')),
+                                  ),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                    icon: syncState.isSyncing
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync_rounded, size: 16),
+                    label: Text(syncState.isSyncing ? 'Syncing...' : 'Sync Now'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: fgColor,
+                    ),
+                  )
+                else
+                  TextButton.icon(
+                    onPressed: () => showOfflinePunchesSheet(context),
+                    icon: const Icon(Icons.visibility_outlined, size: 16),
+                    label: const Text('Review'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: fgColor,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

@@ -24,6 +24,7 @@ import 'package:tks_nexa_attendance/features/organization/presentation/failure_m
 import 'package:tks_nexa_attendance/features/notifications/application/notification_inbox_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/shift_reminder_service.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/offline_punch_sync_service.dart';
+import 'package:tks_nexa_attendance/features/attendance/presentation/offline_punches_sheet.dart';
 
 class PhaseOneHomeScreen extends ConsumerStatefulWidget {
   const PhaseOneHomeScreen({super.key});
@@ -2880,6 +2881,8 @@ class _EmployeeDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unreadNotifs = ref.watch(unreadNotificationsCountProvider);
+    final syncState =
+        ref.watch(offlinePunchSyncProvider).value ?? const OfflineSyncState();
     final brand =
         Theme.of(context).extension<AppBrandTheme>() ?? AppBrandTheme.fallback;
     void openRoute(String route) {
@@ -3012,6 +3015,46 @@ class _EmployeeDrawer extends ConsumerWidget {
                           : null,
                       onTap: () => openRoute(AppRoutes.notifications),
                     ),
+                    if (syncState.totalCount > 0)
+                      _DrawerMenuTile(
+                        icon: syncState.hasRejected
+                            ? Icons.warning_amber_rounded
+                            : Icons.cloud_off_rounded,
+                        label: 'Offline Outbox',
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: syncState.hasRejected
+                                    ? const Color(0xFFEF4444)
+                                    : const Color(0xFFF59E0B),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                syncState.hasRejected
+                                    ? '${syncState.rejectedCount} rejected'
+                                    : '${syncState.pendingCount} pending',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: Colors.white.withValues(alpha: .55),
+                            ),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          showOfflinePunchesSheet(context);
+                        },
+                      ),
                     _DrawerMenuTile(
                       icon: Icons.security_rounded,
                       label: 'Security & Devices',

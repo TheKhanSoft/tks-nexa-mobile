@@ -7,11 +7,15 @@ import 'package:tks_nexa_attendance/features/attendance/domain/offline_punch_ite
 abstract interface class OfflinePunchOutbox {
   Future<List<OfflinePunchItem>> getAll();
   Future<List<OfflinePunchItem>> getPending();
+  Future<List<OfflinePunchItem>> getRejected();
   Future<void> enqueue(OfflinePunchItem item);
   Future<void> update(OfflinePunchItem item);
   Future<void> remove(String id);
   Future<int> getPendingCount();
+  Future<int> getRejectedCount();
   Future<void> clear();
+  Future<void> clearRejected();
+  Future<void> clearSynced();
 }
 
 class FileOfflinePunchOutbox implements OfflinePunchOutbox {
@@ -69,6 +73,14 @@ class FileOfflinePunchOutbox implements OfflinePunchOutbox {
   }
 
   @override
+  Future<List<OfflinePunchItem>> getRejected() async {
+    final all = await getAll();
+    return all
+        .where((item) => item.status == OfflinePunchStatus.rejected)
+        .toList();
+  }
+
+  @override
   Future<void> enqueue(OfflinePunchItem item) async {
     final dir = await _getDirectory();
     final cleanId = item.id.replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
@@ -97,6 +109,28 @@ class FileOfflinePunchOutbox implements OfflinePunchOutbox {
   Future<int> getPendingCount() async {
     final pending = await getPending();
     return pending.length;
+  }
+
+  @override
+  Future<int> getRejectedCount() async {
+    final rejected = await getRejected();
+    return rejected.length;
+  }
+
+  @override
+  Future<void> clearRejected() async {
+    final rejected = await getRejected();
+    for (final item in rejected) {
+      await remove(item.id);
+    }
+  }
+
+  @override
+  Future<void> clearSynced() async {
+    final all = await getAll();
+    for (final item in all.where((i) => i.status == OfflinePunchStatus.synced)) {
+      await remove(item.id);
+    }
   }
 
   @override

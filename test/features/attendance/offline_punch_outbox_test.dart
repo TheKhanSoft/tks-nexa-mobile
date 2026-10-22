@@ -15,6 +15,7 @@ class MockMobileAttendanceService implements MobileAttendanceService {
   final List<Map<String, dynamic>> submittedPayloads = [];
   bool simulateOffline = false;
   bool simulateBusinessError = false;
+  bool simulateSimilarityMismatch = false;
 
   @override
   Future<AttendanceMarkResult> submitRawPunchPayload(Map<String, dynamic> payload) async {
@@ -30,6 +31,13 @@ class MockMobileAttendanceService implements MobileAttendanceService {
         code: FailureCode.invalidInput,
         message: 'Punch already marked for this shift.',
         diagnosticCode: 'ALREADY_MARKED',
+      );
+    }
+    if (simulateSimilarityMismatch) {
+      throw const AppFailure(
+        code: FailureCode.invalidInput,
+        message: 'Facial similarity score (52.4%) is below the required 75.0% matching threshold.',
+        diagnosticCode: 'CONFIDENCE_BELOW_THRESHOLD',
       );
     }
     submittedPayloads.add(payload);
@@ -260,6 +268,78 @@ void main() {
       final items = await outbox.getAll();
       expect(items.first.status, equals(OfflinePunchStatus.failed));
       expect(items.first.lastError, equals('Punch already marked for this shift.'));
+    });
+
+    test('syncAll marks punch as rejected when similarity is below threshold', () async {
+      mockService.simulateSimilarityMismatch = true;
+
+      final now = DateTime.utc(2026, 10, 20, 10, 0);
+      await outbox.enqueue(OfflinePunchItem(
+        id: 'similarity_fail_1',
+        capturedAt: now,
+        requestPayload: {
+          'similarity_score': 0.524,
+          'match_threshold': 0.75,
+        },
+        status: OfflinePunchStatus.pending,
+        createdAt: now,
+      ));
+
+      final controller = container.read(offlinePunchSyncProvider.notifier);
+      final result = await controller.syncAll(overrideService: mockService);
+
+      expect(result.syncedCount, equals(0));
+      expect(result.rejectedCount, equals(1));
+      expect(result.errors, contains(contains('below the required 75.0% matching threshold')));
+
+      final all = await outbox.getAll();
+      final rejectedItem = all.firstWhere((i) => i.id == 'similarity_fail_1');
+      expect(rejectedItem.status, equals(OfflinePunchStatus.rejected));
+      expect(rejectedItem.isRejected, isTrue);
+      expect(rejectedItem.lastError, contains('below the required 75.0% matching threshold'));
+
+      // Rejected items are excluded from pendingCount
+      final state = container.read(offlinePunchSyncProvider).value!;
+      expect(state.pendingCount, equals(0));
+      expect(state.rejectedCount, equals(1));
+    });
+
+    test('fromJson auto-migrates legacy punches with similarity error to rejected status', () {
+      final legacyJson = {
+        'id': 'legacy_stuck_punch',
+        'captured_at': '2026-10-20T10:00:00.000Z',
+        'request_payload': {'similarity_score': 0.52},
+        'status': 'failed',
+        'created_at': '2026-10-20T10:00:00.000Z',
+        'sync_attempts': 3,
+        'last_error': 'Facial similarity score is below the required 75% threshold',
+      };
+
+      final migrated = OfflinePunchItem.fromJson(legacyJson);
+      expect(migrated.status, equals(OfflinePunchStatus.rejected));
+      expect(migrated.isRejected, isTrue);
+    });
+
+    test('retryPunch and removePunch operate properly from controller', () async {
+      final now = DateTime.utc(2026, 10, 20, 11, 0);
+      await outbox.enqueue(OfflinePunchItem(
+        id: 'punch_to_remove',
+        capturedAt: now,
+        requestPayload: {'key': 'val'},
+        status: OfflinePunchStatus.rejected,
+        createdAt: now,
+        lastError: 'Similarity mismatch',
+      ));
+
+      final controller = container.read(offlinePunchSyncProvider.notifier);
+      await controller.refresh();
+
+      expect(container.read(offlinePunchSyncProvider).value!.rejectedCount, equals(1));
+
+      // Remove it
+      await controller.removePunch('punch_to_remove');
+      expect(container.read(offlinePunchSyncProvider).value!.rejectedCount, equals(0));
+      expect(await outbox.getAll(), isEmpty);
     });
   });
 }

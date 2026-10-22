@@ -605,7 +605,7 @@ class MobileAttendanceApi implements MobileAttendanceService {
     return AppFailure(
       code: switch (status) {
         401 => FailureCode.unauthorized,
-        403 || 422 => FailureCode.invalidInput,
+        400 || 403 || 422 => FailureCode.invalidInput,
         409 => FailureCode.invalidInput,
         429 => FailureCode.rateLimited,
         _ => FailureCode.unavailable,
