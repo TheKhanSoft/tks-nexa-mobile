@@ -39,7 +39,8 @@ class MobilePunchLogItem {
 }
 
 DateTime _combineDateAndTime(DateTime date, String? timeStr) {
-  if (timeStr == null || timeStr.isEmpty || timeStr == '--:--' || timeStr == 'Pending') return date;
+  final localDate = date.toLocal();
+  if (timeStr == null || timeStr.isEmpty || timeStr == '--:--' || timeStr == 'Pending') return localDate;
   try {
     final s = timeStr.trim();
     final match12 = RegExp(r'^(\d{1,2}):(\d{2})\s*(AM|PM)$', caseSensitive: false).firstMatch(s);
@@ -49,14 +50,14 @@ DateTime _combineDateAndTime(DateTime date, String? timeStr) {
       final period = match12.group(3)!.toUpperCase();
       if (period == 'PM' && hour < 12) hour += 12;
       if (period == 'AM' && hour == 12) hour = 0;
-      return DateTime(date.year, date.month, date.day, hour, min);
+      return DateTime(localDate.year, localDate.month, localDate.day, hour, min);
     }
     final parts = s.split(':');
     if (parts.length >= 2) {
-      return DateTime(date.year, date.month, date.day, int.parse(parts[0]), int.parse(parts[1]));
+      return DateTime(localDate.year, localDate.month, localDate.day, int.parse(parts[0]), int.parse(parts[1]));
     }
   } catch (_) {}
-  return date;
+  return localDate;
 }
 
 final mobilePunchLogsProvider = FutureProvider<List<MobilePunchLogItem>>((ref) async {

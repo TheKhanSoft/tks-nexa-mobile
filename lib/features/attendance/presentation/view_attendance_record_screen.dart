@@ -51,11 +51,12 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
     required DateTime recordDate,
     String? localPhotoPath,
   }) {
-    // Derive date + time
-    DateTime ts = touchpoint.timestamp ?? recordDate;
+    // Derive date + time in local device timezone
+    DateTime ts = (touchpoint.timestamp ?? recordDate).toLocal();
     if (touchpoint.timestamp == null || (ts.hour == 0 && ts.minute == 0 && ts.second == 0)) {
       ts = combineDateWithTime(recordDate, touchpoint.time);
     }
+    ts = ts.toLocal();
 
     final code = touchpoint.displayVerificationCode.isNotEmpty
         ? touchpoint.displayVerificationCode
@@ -90,7 +91,7 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
     final timeStr = isCheckOut
         ? (record.lastOutFormatted ?? record.lastOut)
         : (record.firstInFormatted ?? record.firstIn);
-    final ts = combineDateWithTime(record.date, timeStr);
+    final ts = combineDateWithTime(record.date, timeStr).toLocal();
 
     final code = (record.verificationCode != null && record.verificationCode!.trim().isNotEmpty)
         ? record.verificationCode!.trim().toUpperCase()
@@ -122,15 +123,16 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
 
   /// Factory helper from a MobilePunchLogItem
   static ViewAttendanceRecordScreen fromMobileLog(MobilePunchLogItem item) {
+    final ts = item.timestamp.toLocal();
     final code = (item.verificationCode != null && item.verificationCode!.trim().isNotEmpty)
         ? item.verificationCode!.trim().toUpperCase()
         : AttendanceWatermarkService.formatVerificationCode(
             item.id,
-            timestamp: item.timestamp,
+            timestamp: ts,
           );
 
     return ViewAttendanceRecordScreen(
-      timestamp: item.timestamp,
+      timestamp: ts,
       verificationCode: code,
       locationAddress: item.locationName,
       photoPath: item.photoPath,
@@ -144,8 +146,9 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
   }
 
   static DateTime combineDateWithTime(DateTime date, String? timeStr) {
+    final localDate = date.toLocal();
     if (timeStr == null || timeStr.isEmpty || timeStr == '--:--' || timeStr == 'Pending') {
-      return date;
+      return localDate;
     }
     try {
       final s = timeStr.trim();
@@ -157,14 +160,17 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
         final period = match12.group(4)!.toUpperCase();
         if (period == 'PM' && hour < 12) hour += 12;
         if (period == 'AM' && hour == 12) hour = 0;
-        return DateTime(date.year, date.month, date.day, hour, min, sec);
+        return DateTime(localDate.year, localDate.month, localDate.day, hour, min, sec);
       }
       final parts = s.split(':');
       if (parts.length >= 2) {
-        return DateTime(date.year, date.month, date.day, int.parse(parts[0]), int.parse(parts[1]));
+        final hour = int.parse(parts[0]);
+        final min = int.parse(parts[1]);
+        final sec = parts.length >= 3 ? int.parse(parts[2]) : 0;
+        return DateTime(localDate.year, localDate.month, localDate.day, hour, min, sec);
       }
     } catch (_) {}
-    return date;
+    return localDate;
   }
 
   @override
@@ -174,6 +180,8 @@ class ViewAttendanceRecordScreen extends ConsumerStatefulWidget {
 class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecordScreen> {
   bool _isProcessing = false;
   String? _resolvedPhotoPath;
+
+  DateTime get _localTimestamp => widget.timestamp.toLocal();
 
   @override
   void initState() {
@@ -191,8 +199,8 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
 
     // Tier 1: Try match by punch timestamp or verificationCode
     String? pMatch = await selfieStorage.getSelfiePath(
-      date: widget.timestamp,
-      timestamp: widget.timestamp,
+      date: _localTimestamp,
+      timestamp: _localTimestamp,
       verificationCode: widget.verificationCode,
       type: isOut ? 'check_out' : 'check_in',
       exactOnly: false,
@@ -201,7 +209,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
     // Tier 2: Try match by date alone (ignoring strict seconds/minutes drift)
     if (pMatch == null) {
       pMatch = await selfieStorage.getSelfiePath(
-        date: widget.timestamp,
+        date: _localTimestamp,
         verificationCode: widget.verificationCode,
         type: isOut ? 'check_out' : 'check_in',
         exactOnly: false,
@@ -210,7 +218,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
 
     // Tier 3: Try match any punch selfie saved on that date
     if (pMatch == null) {
-      pMatch = await selfieStorage.getAnySelfieForDate(widget.timestamp);
+      pMatch = await selfieStorage.getAnySelfieForDate(_localTimestamp);
     }
 
     // Tier 4: Look in offline outbox for any punch matching this date
@@ -219,14 +227,15 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
         final outbox = ref.read(offlinePunchOutboxProvider);
         final items = await outbox.getAll();
         final dateStr =
-            '${widget.timestamp.year}-${widget.timestamp.month.toString().padLeft(2, '0')}-${widget.timestamp.day.toString().padLeft(2, '0')}';
+            '${_localTimestamp.year}-${_localTimestamp.month.toString().padLeft(2, '0')}-${_localTimestamp.day.toString().padLeft(2, '0')}';
         for (final item in items) {
+          final itemLocal = item.capturedAt.toLocal();
           final itemDateStr =
-              '${item.capturedAt.year}-${item.capturedAt.month.toString().padLeft(2, '0')}-${item.capturedAt.day.toString().padLeft(2, '0')}';
+              '${itemLocal.year}-${itemLocal.month.toString().padLeft(2, '0')}-${itemLocal.day.toString().padLeft(2, '0')}';
           if (itemDateStr == dateStr && item.snapshotBase64 != null) {
             pMatch = await selfieStorage.saveSelfieFromBase64(
               base64String: item.snapshotBase64!,
-              date: widget.timestamp,
+              date: _localTimestamp,
               type: isOut ? 'check_out' : 'check_in',
               id: item.id,
             );
@@ -241,7 +250,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
       try {
         pMatch = await selfieStorage.saveSelfieFromBase64(
           base64String: widget.snapshotUrl!,
-          date: widget.timestamp,
+          date: _localTimestamp,
           type: isOut ? 'check_out' : 'check_in',
         );
       } catch (_) {}
@@ -333,7 +342,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
 
   String get _code {
     return widget.verificationCode ??
-        AttendanceWatermarkService.formatVerificationCode(null, timestamp: widget.timestamp);
+        AttendanceWatermarkService.formatVerificationCode(null, timestamp: _localTimestamp);
   }
 
   String _formatSpacedCode(String code) {
@@ -397,7 +406,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
       originalPhotoBytes: rawBytes,
       photoPath: _resolvedPhotoPath,
       verificationCode: _code,
-      timestamp: widget.timestamp,
+      timestamp: _localTimestamp,
       latitude: widget.latitude ?? 34.188177,
       longitude: widget.longitude ?? 71.908437,
       username: username,
@@ -463,7 +472,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
         await watermarkService.shareDirectToWhatsApp(
           imageBytes: bytes,
           verificationCode: _code,
-          timestamp: widget.timestamp,
+          timestamp: _localTimestamp,
           latitude: widget.latitude ?? 34.188177,
           longitude: widget.longitude ?? 71.908437,
         );
@@ -471,7 +480,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
         await watermarkService.shareAttendance(
           imageBytes: bytes,
           verificationCode: _code,
-          timestamp: widget.timestamp,
+          timestamp: _localTimestamp,
           latitude: widget.latitude ?? 34.188177,
           longitude: widget.longitude ?? 71.908437,
         );
@@ -645,7 +654,7 @@ class _ViewAttendanceRecordScreenState extends ConsumerState<ViewAttendanceRecor
                       const Icon(Icons.calendar_month_rounded, color: Color(0xFF38BDF8), size: 20),
                       const SizedBox(width: 12),
                       Text(
-                        AttendanceWatermarkService.formatTimestamp(widget.timestamp),
+                        AttendanceWatermarkService.formatTimestamp(_localTimestamp),
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
                           fontSize: 15,

@@ -721,7 +721,7 @@ class _TimelineNode extends StatelessWidget {
                 onTap: () {
                   final resolvedTimestamp = (tp.timestamp != null &&
                           (tp.timestamp!.hour != 0 || tp.timestamp!.minute != 0 || tp.timestamp!.second != 0))
-                      ? tp.timestamp!
+                      ? tp.timestamp!.toLocal()
                       : ViewAttendanceRecordScreen.combineDateWithTime(record.date, tp.time);
                   Navigator.of(context).push(
                     MaterialPageRoute(

@@ -24,14 +24,15 @@ class AttendanceWatermarkService {
 
   static const MethodChannel _platformChannel = MethodChannel('com.tksnexa.thekhansoft/device_security');
 
-  /// Format a DateTime as 'YYYY-MM-DD HH:mm:ss'
+  /// Format a DateTime as 'YYYY-MM-DD HH:mm:ss' in local timezone
   static String formatTimestamp(DateTime dt) {
-    final y = dt.year.toString().padLeft(4, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    final h = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    final s = dt.second.toString().padLeft(2, '0');
+    final local = dt.toLocal();
+    final y = local.year.toString().padLeft(4, '0');
+    final m = local.month.toString().padLeft(2, '0');
+    final d = local.day.toString().padLeft(2, '0');
+    final h = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    final s = local.second.toString().padLeft(2, '0');
     return '$y-$m-$d $h:$min:$s';
   }
 
@@ -44,7 +45,8 @@ class AttendanceWatermarkService {
       }
     }
 
-    final seed = '${timestamp?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch}_${fallbackSeed ?? 'nexa'}';
+    final localTs = timestamp?.toLocal();
+    final seed = '${localTs?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch}_${fallbackSeed ?? 'nexa'}';
     final digest = md5.convert(utf8.encode(seed)).bytes;
     return digest.take(4).map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
   }

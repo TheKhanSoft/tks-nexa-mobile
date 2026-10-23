@@ -418,7 +418,7 @@ class MobileAttendanceApi implements MobileAttendanceService {
       final rawTs = tpm['timestamp'] ?? tpm['time_raw'];
       DateTime? parsedTs;
       if (rawTs != null) {
-        parsedTs = DateTime.tryParse(rawTs.toString());
+        parsedTs = DateTime.tryParse(rawTs.toString())?.toLocal();
       }
 
       // Strictly sanitize titles: eliminate "Exit Scanner", "Check-in", "+ Geofence"
@@ -478,7 +478,7 @@ class MobileAttendanceApi implements MobileAttendanceService {
             tpm['verification_photo']?.toString() ??
             tpm['selfie_url']?.toString() ??
             tpm['face_photo_url']?.toString(),
-        timestamp: parsedTs ?? _combineDateWithTimeStr(fallbackDate, _string(tpm['time'], fallback: '--:--')),
+        timestamp: (parsedTs ?? _combineDateWithTimeStr(fallbackDate, _string(tpm['time'], fallback: '--:--')))?.toLocal(),
       );
     }).toList(growable: false);
 
@@ -525,7 +525,7 @@ class MobileAttendanceApi implements MobileAttendanceService {
   }
 
   static DateTime? _combineDateWithTimeStr(String dateStr, String timeStr) {
-    final d = DateTime.tryParse(dateStr);
+    final d = DateTime.tryParse(dateStr)?.toLocal();
     if (d == null) return null;
     if (timeStr.isEmpty || timeStr == '--:--' || timeStr == 'Pending') return d;
     try {
