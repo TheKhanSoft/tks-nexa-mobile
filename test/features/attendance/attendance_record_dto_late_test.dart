@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/attendance_record_dto.dart';
+import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 
 void main() {
   group('AttendanceRecordDto & AttendanceRecord Late Arrival Resolution', () {
@@ -149,6 +150,43 @@ void main() {
       expect(dutyRecord.isOfficialDuty, isTrue);
       expect(dutyRecord.status, 'Official Duty');
       expect(dutyRecord.isOffDay, isFalse);
+    });
+
+    test('resolves isMissedCheckOut and formattedNetDuration correctly for past vs today dates', () {
+      final pastDate = DateTime.now().subtract(const Duration(days: 2));
+      final pastRecord = AttendanceRecord(
+        id: 'rec-past-1',
+        date: pastDate,
+        dayName: 'Wednesday',
+        status: 'Present',
+        firstIn: '09:12 AM',
+        firstInFormatted: '09:12 AM',
+        lastOut: null,
+        lastOutFormatted: null,
+      );
+
+      expect(pastRecord.isToday, isFalse);
+      expect(pastRecord.isPastDay, isTrue);
+      expect(pastRecord.isMissedCheckOut, isTrue);
+      // Critical fix: must NOT say 'In Progress' for past day missed check-out!
+      expect(pastRecord.formattedNetDuration, '--');
+
+      final todayRecord = AttendanceRecord(
+        id: 'rec-today-1',
+        date: DateTime.now(),
+        dayName: 'Friday',
+        status: 'Present',
+        firstIn: '08:30 AM',
+        firstInFormatted: '08:30 AM',
+        lastOut: null,
+        lastOutFormatted: null,
+        isShiftEnded: false,
+      );
+
+      expect(todayRecord.isToday, isTrue);
+      expect(todayRecord.isPastDay, isFalse);
+      expect(todayRecord.isMissedCheckOut, isFalse);
+      expect(todayRecord.formattedNetDuration, 'In Progress');
     });
   });
 }

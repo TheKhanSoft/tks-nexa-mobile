@@ -51,3 +51,32 @@ class RegularizationRequest {
   bool get isApproved => status.toLowerCase() == 'approved';
   bool get isRejected => status.toLowerCase() == 'rejected';
 }
+
+class RegularizationMeta {
+  const RegularizationMeta({
+    this.monthlyLimit = 3,
+    this.usedThisMonth = 0,
+    this.remainingThisMonth = 3,
+    this.maxDaysBack = 7,
+    this.suggestedCheckoutTime,
+    this.isMissedCheckout = false,
+  });
+
+  final int monthlyLimit;
+  final int usedThisMonth;
+  final int remainingThisMonth;
+  final int maxDaysBack;
+  final String? suggestedCheckoutTime;
+  final bool isMissedCheckout;
+
+  factory RegularizationMeta.fromJson(Map<String, dynamic> json) {
+    return RegularizationMeta(
+      monthlyLimit: (json['monthly_limit'] as num?)?.toInt() ?? 3,
+      usedThisMonth: (json['used_this_month'] as num?)?.toInt() ?? 0,
+      remainingThisMonth: (json['remaining_this_month'] as num?)?.toInt() ?? 3,
+      maxDaysBack: (json['max_days_back'] as num?)?.toInt() ?? 7,
+      suggestedCheckoutTime: json['suggested_checkout_time'] as String?,
+      isMissedCheckout: json['is_missed_checkout'] == true,
+    );
+  }
+}

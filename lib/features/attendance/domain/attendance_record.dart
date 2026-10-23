@@ -117,10 +117,35 @@ class AttendanceRecord {
       status.toLowerCase().contains('not joined') ||
       status.toLowerCase().contains('not appointed');
 
+  bool get isToday {
+    final now = DateTime.now();
+    final d = date.toLocal();
+    return d.year == now.year && d.month == now.month && d.day == now.day;
+  }
+
+  bool get isPastDay {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = date.toLocal();
+    final recordDay = DateTime(d.year, d.month, d.day);
+    return recordDay.isBefore(today);
+  }
+
+  bool get isMissedCheckOut {
+    if (firstIn == null || firstIn == '--:--' || firstIn == 'Pending') return false;
+    final hasNoOut = lastOut == null || lastOut == '--:--' || lastOut == 'Pending';
+    return hasNoOut && (isPastDay || isShiftEnded);
+  }
+
   String get formattedNetDuration {
     if (isOutsideShift) return '--';
-    if (firstIn == null || lastOut == null) {
-      if (firstIn != null && lastOut == null) return 'In Progress';
+    final hasIn = firstIn != null && firstIn != '--:--' && firstIn != 'Pending';
+    final hasNoOut = lastOut == null || lastOut == '--:--' || lastOut == 'Pending';
+    if (!hasIn || hasNoOut) {
+      if (hasIn && hasNoOut) {
+        if (isToday && !isShiftEnded) return 'In Progress';
+        return '--';
+      }
       return '--';
     }
     final inDt = parseTime(firstInFormatted ?? firstIn!);

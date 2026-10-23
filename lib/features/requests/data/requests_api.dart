@@ -356,6 +356,22 @@ class RequestsApi {
     }
   }
 
+  Future<RegularizationMeta?> fetchRegularizationMeta(String date) async {
+    try {
+      final response = await _dio.get<dynamic>(
+        'v1/regularizations',
+        queryParameters: {'date': date},
+        options: _authorized,
+      );
+      final root = _asMap(response.data);
+      final meta = root['meta'] is Map ? Map<String, dynamic>.from(root['meta'] as Map) : null;
+      if (meta == null) return null;
+      return RegularizationMeta.fromJson(meta);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<RegularizationRequest>> fetchPendingRegularizationApprovals({int? year}) async {
     try {
       Response<dynamic> response;

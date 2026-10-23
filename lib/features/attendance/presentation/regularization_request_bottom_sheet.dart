@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tks_nexa_attendance/core/errors/app_failure.dart';
 import 'package:tks_nexa_attendance/features/requests/application/requests_providers.dart';
+import 'package:tks_nexa_attendance/features/requests/domain/regularization_request.dart';
 
 class RegularizationRequestBottomSheet extends ConsumerStatefulWidget {
   const RegularizationRequestBottomSheet({
@@ -38,6 +39,8 @@ class _RegularizationRequestBottomSheetState
   TimeOfDay _requestedTime = const TimeOfDay(hour: 9, minute: 0);
   final _reasonController = TextEditingController();
   bool _submitting = false;
+  RegularizationMeta? _meta;
+  bool _loadingMeta = false;
 
   @override
   void initState() {
@@ -46,6 +49,67 @@ class _RegularizationRequestBottomSheetState
     if (widget.initialPunchType != null && widget.initialPunchType!.isNotEmpty) {
       _punchType = widget.initialPunchType!;
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchMeta();
+    });
+  }
+
+  Future<void> _fetchMeta() async {
+    if (!mounted) return;
+    setState(() => _loadingMeta = true);
+    final dateStr =
+        '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+    try {
+      final meta = await ref.read(requestsApiProvider).fetchRegularizationMeta(dateStr);
+      if (mounted) {
+        setState(() {
+          _meta = meta;
+          _loadingMeta = false;
+          if (widget.initialPunchType == null && meta?.isMissedCheckout == true) {
+            _punchType = 'check_out';
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingMeta = false);
+    }
+  }
+
+  void _applySuggestedCheckout(String exitStr) {
+    final parsed = _parseTimeOfDay(exitStr);
+    if (parsed != null) {
+      setState(() {
+        _requestedTime = parsed;
+        _punchType = 'check_out';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Auto-filled suggested checkout time: $exitStr'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  TimeOfDay? _parseTimeOfDay(String s) {
+    try {
+      final trimmed = s.trim();
+      final match12 = RegExp(r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$', caseSensitive: false).firstMatch(trimmed);
+      if (match12 != null) {
+        var hour = int.parse(match12.group(1)!);
+        final min = int.parse(match12.group(2)!);
+        final period = match12.group(4)!.toUpperCase();
+        if (period == 'PM' && hour < 12) hour += 12;
+        if (period == 'AM' && hour == 12) hour = 0;
+        return TimeOfDay(hour: hour, minute: min);
+      }
+      final parts = trimmed.split(':');
+      if (parts.length >= 2) {
+        return TimeOfDay(hour: int.parse(parts[0].trim()), minute: int.parse(parts[1].trim()));
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override
@@ -183,7 +247,10 @@ class _RegularizationRequestBottomSheetState
                     firstDate: DateTime.now().subtract(const Duration(days: 90)),
                     lastDate: DateTime.now(),
                   );
-                  if (d != null) setState(() => _selectedDate = d);
+                  if (d != null) {
+                    setState(() => _selectedDate = d);
+                    _fetchMeta();
+                  }
                 },
                 icon: const Icon(Icons.calendar_today_rounded, size: 18),
                 label: Text(
@@ -192,9 +259,55 @@ class _RegularizationRequestBottomSheetState
                 ),
               ),
               const SizedBox(height: 14),
+              if (_meta != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _meta!.remainingThisMonth > 0
+                        ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                        : const Color(0xFFEF4444).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _meta!.remainingThisMonth > 0
+                          ? theme.colorScheme.primary.withValues(alpha: 0.25)
+                          : const Color(0xFFEF4444).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _meta!.remainingThisMonth > 0
+                            ? Icons.info_outline_rounded
+                            : Icons.warning_amber_rounded,
+                        size: 16,
+                        color: _meta!.remainingThisMonth > 0
+                            ? theme.colorScheme.primary
+                            : const Color(0xFFEF4444),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _meta!.remainingThisMonth > 0
+                              ? 'Monthly Quota: ${_meta!.remainingThisMonth} of ${_meta!.monthlyLimit} requests remaining'
+                              : 'Monthly Regularization Quota Exceeded (0 remaining)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: _meta!.remainingThisMonth > 0
+                                ? theme.colorScheme.primary
+                                : const Color(0xFFEF4444),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               // Punch Type Dropdown
               DropdownButtonFormField<String>(
-                initialValue: _punchType,
+                value: _punchType,
                 decoration: const InputDecoration(labelText: 'Missed Attendance Type'),
                 items: const [
                   DropdownMenuItem(value: 'check_in', child: Text('Missed Check-In')),
@@ -221,6 +334,52 @@ class _RegularizationRequestBottomSheetState
                 ),
               ),
               const SizedBox(height: 14),
+              if (_meta?.suggestedCheckoutTime != null && _meta!.suggestedCheckoutTime!.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: () => _applySuggestedCheckout(_meta!.suggestedCheckoutTime!),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.auto_awesome_rounded, size: 16, color: Color(0xFF10B981)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Smart 30-Day Clean Average Exit (Shift Capped)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF065F46),
+                                ),
+                              ),
+                              Text(
+                                '${_meta!.suggestedCheckoutTime!} (Tap to Auto-fill)',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF047857),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.touch_app_rounded, size: 18, color: Color(0xFF10B981)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               // Reason
               TextFormField(
                 controller: _reasonController,
@@ -235,7 +394,9 @@ class _RegularizationRequestBottomSheetState
               ),
               const SizedBox(height: 24),
               FilledButton(
-                onPressed: _submitting ? null : _submit,
+                onPressed: (_submitting || (_meta != null && _meta!.remainingThisMonth <= 0))
+                    ? null
+                    : _submit,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(54),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -251,3 +412,4 @@ class _RegularizationRequestBottomSheetState
     );
   }
 }
+

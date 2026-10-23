@@ -833,7 +833,7 @@ class _DailyActivityTile extends StatelessWidget {
         : (isHoliday ? (hasPunches ? inTime : 'Holiday') : inTime);
     final resolvedOutTime = isWeekend
         ? (hasPunches ? outTime : 'Weekly Off')
-        : (isHoliday ? (hasPunches ? outTime : 'Gazetted') : outTime);
+        : (isHoliday ? (hasPunches ? outTime : 'Gazetted') : (record.isMissedCheckOut ? 'Missed Exit' : outTime));
 
     // Leave records label the third cell "Worked", not "Net Duration".
     final durationLabel = record.isOnLeave ? 'Worked' : 'Net Duration';
@@ -961,13 +961,14 @@ class _DailyActivityTile extends StatelessWidget {
                                 child: _TimeCell(
                                   label: 'Check Out',
                                   value: resolvedOutTime,
+                                  valueColor: record.isMissedCheckOut ? _SC.warning : null,
                                 ),
                               ),
                               Expanded(
                                 child: _TimeCell(
                                   label: durationLabel,
-                                  value: isWeekend && !hasPunches ? '--' : (isHoliday && !hasPunches ? '--' : record.formattedNetDuration),
-                                  valueColor: cs.primary,
+                                  value: isWeekend && !hasPunches ? '--' : (isHoliday && !hasPunches ? '--' : (record.isMissedCheckOut ? '--' : record.formattedNetDuration)),
+                                  valueColor: record.isMissedCheckOut ? cs.onSurfaceVariant : cs.primary,
                                   alignEnd: true,
                                 ),
                               ),
@@ -983,6 +984,7 @@ class _DailyActivityTile extends StatelessWidget {
                               onTap: () => RegularizationRequestBottomSheet.show(
                                 context,
                                 initialDate: record.date,
+                                initialPunchType: record.isMissedCheckOut ? 'check_out' : null,
                               ),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
@@ -991,15 +993,15 @@ class _DailyActivityTile extends StatelessWidget {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.edit_calendar_outlined,
-                                        size: 13, color: cs.primary),
+                                    Icon(record.isMissedCheckOut ? Icons.warning_amber_rounded : Icons.edit_calendar_outlined,
+                                        size: 13, color: record.isMissedCheckOut ? _SC.warning : cs.primary),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Regularize',
+                                      record.isMissedCheckOut ? 'Regularize Missed Exit' : 'Regularize',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w800,
-                                        color: cs.primary,
+                                        color: record.isMissedCheckOut ? _SC.warning : cs.primary,
                                       ),
                                     ),
                                   ],
@@ -1025,7 +1027,7 @@ class _DailyActivityTile extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w800,
-                                        color: cs.primary,
+                                        color: record.isMissedCheckOut ? _SC.warning : cs.primary,
                                       ),
                                     ),
                                   ],
