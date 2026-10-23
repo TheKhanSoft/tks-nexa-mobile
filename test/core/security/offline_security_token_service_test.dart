@@ -64,7 +64,9 @@ void main() {
       );
 
       final parts = token.split('.');
-      final tamperedEnvelope = 'X${parts[0].substring(1)}';
+      final tamperedEnvelope = parts[0].startsWith('X')
+          ? 'Y${parts[0].substring(1)}'
+          : 'X${parts[0].substring(1)}';
       final tamperedToken = '$tamperedEnvelope.${parts[1]}';
 
       final decrypted = OfflineSecurityTokenService.verifyAndDecryptToken(

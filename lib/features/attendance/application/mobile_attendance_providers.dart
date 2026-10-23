@@ -135,12 +135,14 @@ final attendanceChallengeProvider =
         return challenge;
       } catch (_) {
         final now = DateTime.now().toUtc();
-        bool isOfflineAllowed = false;
+        bool isOfflineAllowed = true;
         try {
           final cached = await ref
               .read(secureStorageServiceProvider)
               .read('offline_attendance_enabled');
-          isOfflineAllowed = cached == 'true';
+          if (cached == 'false') {
+            isOfflineAllowed = false;
+          }
         } catch (_) {}
         return AttendanceChallenge(
           id: 'offline_${now.millisecondsSinceEpoch}',
@@ -344,7 +346,14 @@ class AttendanceSubmissionController
       final clockVerdict = trustedTimeService.checkClockIntegrity(capturedAt);
 
       Future<AttendanceMarkResult> createOfflineResult() async {
-        if (!challenge.policy.offlineAttendanceEnabled) {
+        String? cached;
+        try {
+          cached = await ref
+              .read(secureStorageServiceProvider)
+              .read('offline_attendance_enabled');
+        } catch (_) {}
+
+        if (cached == 'false' && !challenge.policy.offlineAttendanceEnabled) {
           throw const AppFailure(
             code: FailureCode.invalidInput,
             message:

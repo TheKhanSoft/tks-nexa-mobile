@@ -12,6 +12,7 @@ import 'package:tks_nexa_attendance/features/account/presentation/account_screen
 import 'package:tks_nexa_attendance/features/account/presentation/employee_avatar.dart';
 import 'package:tks_nexa_attendance/features/auth/application/auth_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/application/attendance_history_providers.dart';
+import 'package:tks_nexa_attendance/features/attendance/application/mobile_attendance_providers.dart';
 import 'package:tks_nexa_attendance/features/attendance/data/local_selfie_storage.dart';
 import 'package:tks_nexa_attendance/features/attendance/domain/attendance_record.dart';
 import 'package:tks_nexa_attendance/features/attendance/presentation/attendance_history_screen.dart';
@@ -63,6 +64,7 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
 
     ref.read(shiftReminderServiceProvider).syncShiftReminders();
     ref.read(offlinePunchSyncProvider.notifier).syncAll();
+    ref.read(attendanceChallengeProvider.future).then((_) {}, onError: (_) {});
   }
 
   Future<void> _logout() async {
@@ -78,9 +80,11 @@ class _PhaseOneHomeScreenState extends ConsumerState<PhaseOneHomeScreen> {
     ref.invalidate(attendanceHistoryResponseProvider);
     ref.invalidate(organizationSessionProvider);
     ref.invalidate(mobilePunchLogsProvider);
+    ref.invalidate(attendanceChallengeProvider);
     await Future.wait<void>([
       ref.read(employeeProfileProvider.future).then((_) {}, onError: (_) {}),
       ref.read(attendanceHistoryResponseProvider.future).then((_) {}, onError: (_) {}),
+      ref.read(attendanceChallengeProvider.future).then((_) {}, onError: (_) {}),
     ]);
     if (mounted) {
       ref.read(shiftReminderServiceProvider).syncShiftReminders();

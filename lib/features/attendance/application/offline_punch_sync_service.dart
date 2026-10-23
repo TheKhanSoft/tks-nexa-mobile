@@ -334,8 +334,18 @@ class OfflinePunchSyncController extends AsyncNotifier<OfflineSyncState> {
               msg.contains('below') ||
               msg.contains('unapproved') ||
               msg.contains('rejected') ||
+              msg.contains('disabled') ||
+              failure.diagnosticCode == 'OFFLINE_ATTENDANCE_DISABLED' ||
               failure.diagnosticCode == 'CONFIDENCE_BELOW_THRESHOLD' ||
               failure.diagnosticCode == 'LIVENESS_FAILED';
+
+          if (failure.diagnosticCode == 'OFFLINE_ATTENDANCE_DISABLED') {
+            try {
+              await ref
+                  .read(secureStorageServiceProvider)
+                  .write('offline_attendance_enabled', 'false');
+            } catch (_) {}
+          }
 
           if (isMismatch) {
             rejected++;
