@@ -860,7 +860,12 @@ class _DailyActivityTile extends StatelessWidget {
               color: cs.outlineVariant.withValues(alpha: 0.5),
             ),
           ),
-          child: IntrinsicHeight(
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: radius,
+              onTap: () => ShiftDetailBottomSheet.show(context, record),
+              child: IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1045,7 +1050,9 @@ class _DailyActivityTile extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   static Widget _buildTilePhoto(AttendanceRecord record, Color color) {

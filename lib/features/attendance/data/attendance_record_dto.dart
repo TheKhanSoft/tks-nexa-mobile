@@ -176,7 +176,18 @@ class AttendanceRecordDto {
 
   static AttendanceRecord fromMap(Map<String, dynamic> map) {
     final rawDate = map['date'] ?? map['attendance_date'] ?? map['created_at'];
-    final date = rawDate is String ? (DateTime.tryParse(rawDate)?.toLocal() ?? DateTime.now()) : DateTime.now();
+    DateTime date;
+    if (rawDate is String) {
+      final trimmed = rawDate.trim();
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed)) {
+        final p = trimmed.split('-');
+        date = DateTime(int.parse(p[0]), int.parse(p[1]), int.parse(p[2]));
+      } else {
+        date = DateTime.tryParse(trimmed)?.toLocal() ?? DateTime.now();
+      }
+    } else {
+      date = DateTime.now();
+    }
 
     final deviceMap = map['device_captured_with'] is Map
         ? Map<String, dynamic>.from(map['device_captured_with'])
